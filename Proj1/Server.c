@@ -157,7 +157,7 @@ int main(int argc, char** argv){
 
 char* processUDPMessage(char* buffer, int len){
     const char s[2] = " ";
-    char command[4] = "NUL", *arg1, *response;
+    char command[4] = "NUL", *arg1 = NULL, *response;
 
     char *token;
     int i = 0;
@@ -178,6 +178,13 @@ char* processUDPMessage(char* buffer, int len){
         response = registerNewStudent(arg1);
         return response;
     }
+
+    else if (!strcmp(command, "LTP\n")){
+        //TODO: remove default msg
+        //      check format
+        return "LTR 2 rc:89522 cg:12345\n";
+    }
+
     else {
         printf("Command not found.\n");
     }
