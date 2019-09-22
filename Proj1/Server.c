@@ -11,15 +11,18 @@
 #include <netdb.h>
 
 #define PORT "58013"
+#define BUFFER_SIZE 128
+#define ID_SIZE 5
 
 int nUDP, nTCP, fdUDP, fdTCP, newfd;
 socklen_t addrlenUDP, addrlenTCP;
 struct addrinfo hintsUDP, hintsTCP, *resUDP, *resTCP;
 struct sockaddr_in addrUDP, addrTCP;
-char buffer[128];
+char buffer[BUFFER_SIZE];
 
-void processUDPMessage(char* buffer, int len);
+char* processUDPMessage(char* buffer, int len);
 int checkIfStudentCanRegister(int number);
+char* registerNewStudent(char* arg1);
 void handleKill(int sig);
 
 int main(int argc, char** argv){
@@ -116,15 +119,15 @@ int main(int argc, char** argv){
                 printf("\nUDP\n");
                 int addrlen = sizeof(addrUDP);
 
-                nMsg = recvfrom(fdUDP, buffer, 128, 0, (struct sockaddr*) &addrUDP, &addrlen);
+                nMsg = recvfrom(fdUDP, buffer, BUFFER_SIZE, 0, (struct sockaddr*) &addrUDP, &addrlen);
                 if (nMsg == -1) /*error*/ exit(1);
 
                 /*Analyze message*/
-                processUDPMessage(buffer, 128);
-                /*write(1, "received: ", 10); write(1, buffer, nMsg);*/
+                char *response = processUDPMessage(buffer, BUFFER_SIZE);
+                //write(1, "received: ", 10); write(1, buffer, nMsg);
 
                 /*Send response*/
-                nMsg = sendto(fdUDP, buffer, nMsg, 0, (struct sockaddr*) &addrUDP, addrlen);
+                nMsg = sendto(fdUDP, response, strlen(response), 0, (struct sockaddr*) &addrUDP, addrlen);
                 if (nMsg == -1) /*error*/ exit(1);
 
             }
@@ -134,10 +137,10 @@ int main(int argc, char** argv){
                 if ((newfd = accept(fdTCP, (struct sockaddr*) &addrTCP, &addrlenTCP)) == -1) exit(1);
 
                 /*Analyze message*/
-                nMsg = read(newfd, buffer, 128);
-                
+                nMsg = read(newfd, buffer, BUFFER_SIZE);
                 if (nMsg == -1) exit(1);
-                write(1, "received: ", 10); write(1, buffer, nMsg);
+
+                //write(1, "received: ", 10); write(1, buffer, nMsg);
 
                 /*Send response*/
                 nMsg = write(newfd, buffer, nMsg);
@@ -152,9 +155,9 @@ int main(int argc, char** argv){
     close(fdTCP);
 }
 
-void processUDPMessage(char* buffer, int len){
+char* processUDPMessage(char* buffer, int len){
     const char s[2] = " ";
-    char command[4] = "NUL", *arg1;
+    char command[4] = "NUL", *arg1, *response;
 
     char *token;
     int i = 0;
@@ -172,16 +175,8 @@ void processUDPMessage(char* buffer, int len){
     printf("Command: %s, Arg: %s\n", command, arg1);
     
     if (!strcmp(command, "REG")){
-        int stuNumber = atoi(arg1);
-        if (stuNumber == 0) {
-            printf("Number error.\n");
-            return;
-        }
-
-        int enabled = checkIfStudentCanRegister(stuNumber);
-        if (!enabled) return;
-
-        printf("Register %d\n", stuNumber);
+        response = registerNewStudent(arg1);
+        return response;
     }
     else {
         printf("Command not found.\n");
@@ -198,6 +193,31 @@ int checkIfStudentCanRegister(int number){
     }
     fclose(fp);
     return 0;
+}
+
+char* registerNewStudent(char* arg1){
+    char *response;
+    int stuNumber = atoi(arg1);
+
+    if (stuNumber == 0) {
+        printf("Number error.\n");
+        response = strdup("NOK\n");
+        return response;
+    }
+
+    int enabled = checkIfStudentCanRegister(stuNumber);
+    if (!enabled) {
+        printf("Register %d: refused.\n", stuNumber);    
+        response = strdup("NOK\n");
+        return response;
+    }
+
+    printf("Register %d: accepted.\n", stuNumber);
+
+    /*TODO: Register on file??*/
+
+    response = strdup("OK\n");
+    return response;
 }
 
 void handleKill(int sig){
