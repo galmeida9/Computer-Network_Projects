@@ -18,13 +18,9 @@ struct addrinfo hintsUDP, hintsTCP, *resUDP, *resTCP;
 struct sockaddr_in addrUDP, addrTCP;
 char buffer[128];
 
-void handleKill(int sig){
-    freeaddrinfo(resUDP);
-    freeaddrinfo(resTCP);
-    close(fdUDP);
-    close(fdTCP);
-    _Exit(EXIT_SUCCESS);
-}
+void processUDPMessage(char* buffer, int len);
+int checkIfStudentCanRegister(int number);
+void handleKill(int sig);
 
 int main(int argc, char** argv){
     char port[6];
@@ -39,7 +35,7 @@ int main(int argc, char** argv){
 
     strcpy(port, PORT);
 
-    printf("Welcome to FS\n");
+    printf("Welcome to RC Forum\n");
 
     /*Get port from arguments*/
     int opt; 
@@ -123,8 +119,11 @@ int main(int argc, char** argv){
                 nMsg = recvfrom(fdUDP, buffer, 128, 0, (struct sockaddr*) &addrUDP, &addrlen);
                 if (nMsg == -1) /*error*/ exit(1);
 
-                write(1, "received: ", 10); write(1, buffer, nMsg);
+                /*Analyze message*/
+                processUDPMessage(buffer, 128);
+                /*write(1, "received: ", 10); write(1, buffer, nMsg);*/
 
+                /*Send response*/
                 nMsg = sendto(fdUDP, buffer, nMsg, 0, (struct sockaddr*) &addrUDP, addrlen);
                 if (nMsg == -1) /*error*/ exit(1);
 
@@ -134,10 +133,13 @@ int main(int argc, char** argv){
 
                 if ((newfd = accept(fdTCP, (struct sockaddr*) &addrTCP, &addrlenTCP)) == -1) exit(1);
 
+                /*Analyze message*/
                 nMsg = read(newfd, buffer, 128);
+                
                 if (nMsg == -1) exit(1);
                 write(1, "received: ", 10); write(1, buffer, nMsg);
 
+                /*Send response*/
                 nMsg = write(newfd, buffer, nMsg);
                 if (nMsg == -1) exit(1);
             }
@@ -148,4 +150,60 @@ int main(int argc, char** argv){
     freeaddrinfo(resTCP);
     close(fdUDP);
     close(fdTCP);
+}
+
+void processUDPMessage(char* buffer, int len){
+    const char s[2] = " ";
+    char command[4] = "NUL", *arg1;
+
+    char *token;
+    int i = 0;
+    token = strtok(buffer, s);
+    while (token != NULL){
+        if (i==0) strcpy(command, token);
+        else {
+            int lenArg = strlen(token);
+            arg1 = strdup(token);
+        }
+        token = strtok(NULL, s);
+        i++;
+    }
+
+    printf("Command: %s, Arg: %s\n", command, arg1);
+    
+    if (!strcmp(command, "REG")){
+        int stuNumber = atoi(arg1);
+        if (stuNumber == 0) {
+            printf("Number error.\n");
+            return;
+        }
+
+        int enabled = checkIfStudentCanRegister(stuNumber);
+        if (!enabled) return;
+
+        printf("Register %d\n", stuNumber);
+    }
+    else {
+        printf("Command not found.\n");
+    }
+}
+
+int checkIfStudentCanRegister(int number){
+    FILE* fp = fopen("students.txt", "r");
+    int currNumber = -1;
+    char line[6] = "";
+    while (fgets(line, sizeof(line), fp)){
+        currNumber = atoi(line);
+        if (currNumber == number) return 1;
+    }
+    fclose(fp);
+    return 0;
+}
+
+void handleKill(int sig){
+    freeaddrinfo(resUDP);
+    freeaddrinfo(resTCP);
+    close(fdUDP);
+    close(fdTCP);
+    _Exit(EXIT_SUCCESS);
 }

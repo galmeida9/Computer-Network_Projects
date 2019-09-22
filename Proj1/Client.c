@@ -9,13 +9,18 @@
 #include <string.h>
 
 #define  DEFAULT_PORT "58013"
+#define BUFFER_SIZE 128
+#define ID_SIZE 5
+#define REGISTER_SIZE 12
 
 void parseArgs(int number, char** arguments, char **port, char **ip);
 void connectToServer(int *udp_fd, int *tcp_fd, char *ip, char *port, struct addrinfo hints, struct addrinfo **resUDP, struct addrinfo **resTCP);
 void SendMessageUDP(char *message, int fd, struct addrinfo *res);
-void receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr);
+char* receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr);
 void SendMessageTCP(char *message, int fd, struct addrinfo *res);
-void receiveMessageTCP(int fd);
+char* receiveMessageTCP(int fd);
+void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP, struct addrinfo *resTCP, socklen_t addrlen, struct sockaddr_in addr);
+void registerNewUser(int id, int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr);
 
 int main(int argc, char** argv) {
     int *udp_fd = malloc(sizeof(int));
@@ -35,6 +40,15 @@ int main(int argc, char** argv) {
     *udp_fd = -1; *tcp_fd = -1;
     connectToServer(udp_fd, tcp_fd, ip, port, hints, &resUDP, &resTCP);
 
+    int userId;
+    parseCommands(&userId, *udp_fd, *tcp_fd, resUDP, resTCP, addrlen, addr);
+
+    freeaddrinfo(resTCP);
+    freeaddrinfo(resUDP);
+    close(*udp_fd);
+    close(*tcp_fd);
+    free(udp_fd);
+    free(tcp_fd);
     return 0;
 }
 
@@ -93,17 +107,19 @@ void SendMessageUDP(char *message, int fd, struct addrinfo *res) {
 
     n = sendto(fd, message, strlen(message), 0, res->ai_addr, res->ai_addrlen);
     if (n == -1) exit(1);
-    printf("enviei\n");
+    printf("enviei %s", message);
 }
 
-void receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr) {
+char* receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr) {
     ssize_t n;  
-    char buffer[128];
+    char *buffer = malloc(sizeof(char) * BUFFER_SIZE);
     addrlen = sizeof(addr);
 
     n = recvfrom(fd, buffer, 128, 0, (struct sockaddr*) &addr, &addrlen);
     if (n == -1) exit(1);
     printf("%s\n", buffer);
+
+    return buffer;
 }
 
 void SendMessageTCP(char *message, int fd, struct addrinfo *res) {
@@ -117,11 +133,51 @@ void SendMessageTCP(char *message, int fd, struct addrinfo *res) {
     printf("enviei\n");
 }
 
-void receiveMessageTCP(int fd) {
+char* receiveMessageTCP(int fd) {
     ssize_t n;  
-    char buffer[128];
+    char *buffer = malloc(sizeof(char) * BUFFER_SIZE);
 
     n = read(fd, buffer, 128);
     if (n == -1) exit(1);
     printf("%s\n", buffer);
+
+    return buffer;
+}
+
+void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP, struct addrinfo *resTCP, socklen_t addrlen, struct sockaddr_in addr) {
+    char *line = malloc(sizeof(char) * BUFFER_SIZE), *command;
+    size_t size;
+
+    while(1) {
+        getline(&line, &size, stdin);
+        command = strtok(line, " ");
+
+        if (strcmp(command, "register") == 0 || strcmp(command, "reg") == 0) {
+            command = strtok(NULL, " ");
+            if (command != NULL && strlen(command) == ID_SIZE + 1) {
+                *userId = atoi(strtok(command, "\n"));
+                strtok(NULL, " ") != NULL  || *userId == 0? printf("Invalid command.\n") : registerNewUser(*userId, udp_fd, resUDP, addrlen, addr);
+                
+            }
+            else {
+                printf("Invalid command.\n");
+            }
+        }
+        else if (strcmp(line, "exit\n") == 0) {
+            free(line);
+            return;
+        }
+        else printf("Invalid command.\n");
+    }
+}
+
+void registerNewUser(int id, int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr) {
+    char *message = malloc(sizeof(char) * REGISTER_SIZE);
+
+    snprintf(message, REGISTER_SIZE, "REG %d\n", id);
+    SendMessageUDP(message, fd, res);
+    char* status = receiveMessageUDP(fd, addrlen, addr);
+    strcmp(status, "OK\n") ==  0 ? printf("Registration Complete!\n") : printf("Could not register user, invalid user ID.\n");
+    free(message);
+    free(status);
 }
