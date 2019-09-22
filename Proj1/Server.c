@@ -22,6 +22,7 @@ char buffer[BUFFER_SIZE];
 
 char* processUDPMessage(char* buffer, int len);
 int checkIfStudentCanRegister(int number);
+char* registerNewStudent(char* arg1);
 void handleKill(int sig);
 
 int main(int argc, char** argv){
@@ -174,24 +175,7 @@ char* processUDPMessage(char* buffer, int len){
     printf("Command: %s, Arg: %s\n", command, arg1);
     
     if (!strcmp(command, "REG")){
-        int stuNumber = atoi(arg1);
-        if (stuNumber == 0) {
-            printf("Number error.\n");
-            response = strdup("NOK\n");
-            return response;
-        }
-
-        int enabled = checkIfStudentCanRegister(stuNumber);
-        if (!enabled) {
-            printf("Register %d: refused.\n", stuNumber);    
-            response = strdup("NOK\n");
-            return response;
-        }
-
-        printf("Register %d: accepted.\n", stuNumber);
-        /*Register on file??*/
-
-        response = strdup("OK\n");
+        response = registerNewStudent(arg1);
         return response;
     }
     else {
@@ -209,6 +193,31 @@ int checkIfStudentCanRegister(int number){
     }
     fclose(fp);
     return 0;
+}
+
+char* registerNewStudent(char* arg1){
+    char *response;
+    int stuNumber = atoi(arg1);
+
+    if (stuNumber == 0) {
+        printf("Number error.\n");
+        response = strdup("NOK\n");
+        return response;
+    }
+
+    int enabled = checkIfStudentCanRegister(stuNumber);
+    if (!enabled) {
+        printf("Register %d: refused.\n", stuNumber);    
+        response = strdup("NOK\n");
+        return response;
+    }
+
+    printf("Register %d: accepted.\n", stuNumber);
+
+    /*TODO: Register on file??*/
+
+    response = strdup("OK\n");
+    return response;
 }
 
 void handleKill(int sig){
