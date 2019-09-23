@@ -13,6 +13,7 @@
 #define PORT "58013"
 #define BUFFER_SIZE 128
 #define ID_SIZE 5
+#define TOPIC_LIST "topics/List_of_Topics.txt"
 
 int nUDP, nTCP, fdUDP, fdTCP, newfd;
 socklen_t addrlenUDP, addrlenTCP;
@@ -23,6 +24,7 @@ char buffer[BUFFER_SIZE];
 char* processUDPMessage(char* buffer, int len);
 int checkIfStudentCanRegister(int number);
 char* registerNewStudent(char* arg1);
+char* listOfTopics();
 void handleKill(int sig);
 
 int main(int argc, char** argv){
@@ -118,18 +120,21 @@ int main(int argc, char** argv){
             if (FD_ISSET(fdUDP, &readset)){
                 printf("\nUDP\n");
                 int addrlen = sizeof(addrUDP);
+                char *bufferUDP = malloc(sizeof(char) * BUFFER_SIZE);
 
-                nMsg = recvfrom(fdUDP, buffer, BUFFER_SIZE, 0, (struct sockaddr*) &addrUDP, &addrlen);
+                nMsg = recvfrom(fdUDP, bufferUDP, BUFFER_SIZE, 0, (struct sockaddr*) &addrUDP, &addrlen);
                 if (nMsg == -1) /*error*/ exit(1);
 
                 /*Analyze message*/
-                char *response = processUDPMessage(buffer, BUFFER_SIZE);
+                char *response = processUDPMessage(strtok(bufferUDP, "\n"), BUFFER_SIZE);
                 //write(1, "received: ", 10); write(1, buffer, nMsg);
 
                 /*Send response*/
                 nMsg = sendto(fdUDP, response, strlen(response), 0, (struct sockaddr*) &addrUDP, addrlen);
                 if (nMsg == -1) /*error*/ exit(1);
 
+                free(response);
+                free(bufferUDP);
             }
             else if (FD_ISSET(fdTCP, &readset)){
                 printf("\nTCP\n");
@@ -156,37 +161,26 @@ int main(int argc, char** argv){
 }
 
 char* processUDPMessage(char* buffer, int len){
-    const char s[2] = " ";
-    char command[4] = "NUL", *arg1 = NULL, *response;
+    char *command, *response;
+    size_t size;
 
-    char *token;
-    int i = 0;
-    token = strtok(buffer, s);
-    while (token != NULL){
-        if (i==0) strcpy(command, token);
-        else {
-            int lenArg = strlen(token);
-            arg1 = strdup(token);
-        }
-        token = strtok(NULL, s);
-        i++;
-    }
+    command = strtok(buffer, " ");
 
-    printf("Command: %s, Arg: %s\n", command, arg1);
-    
-    if (!strcmp(command, "REG")){
-        response = registerNewStudent(arg1);
+    if (strcmp(command, "REG") == 0) {
+        command = strtok(NULL, " ");
+        response = registerNewStudent(command);
         return response;
     }
 
-    else if (!strcmp(command, "LTP\n")){
-        //TODO: remove default msg
-        //      check format
-        return "LTR 2 rc:89522 cg:12345\n";
+    else if (strcmp(command, "LTP") == 0) {
+        printf("Entrei\n");
+        response = listOfTopics();
+        return response;
     }
 
     else {
         printf("Command not found.\n");
+        return NULL;
     }
 }
 
@@ -196,7 +190,10 @@ int checkIfStudentCanRegister(int number){
     char line[6] = "";
     while (fgets(line, sizeof(line), fp)){
         currNumber = atoi(line);
-        if (currNumber == number) return 1;
+        if (currNumber == number) {
+            fclose(fp);
+            return 1;
+        }
     }
     fclose(fp);
     return 0;
@@ -225,6 +222,57 @@ char* registerNewStudent(char* arg1){
 
     response = strdup("OK\n");
     return response;
+}
+
+char* listOfTopics() {
+    int numberOfTopics = 0;
+    char *response = malloc(sizeof(char) * BUFFER_SIZE);
+    char *finalResponse = malloc(sizeof(char) * BUFFER_SIZE);
+    char numberString[6];
+    char *line;
+    size_t len = 0;
+    ssize_t nread;
+    FILE *topicList;
+
+    strcpy(response, " ");
+    topicList = fopen(TOPIC_LIST, "r");
+    if (topicList == NULL) exit(1);
+
+    while ((nread = getline(&line, &len, topicList)) != -1) {
+        char *token;
+        char *id;
+        numberOfTopics++;
+
+        /*Get topic: in string*/
+        token = strtok(line, ":");
+        strcat(response, token);
+        response[strlen(response)] = '\0';
+        strcat(response, ":\0");
+
+        /*Get user ID*/
+        token = strtok(NULL, ":");
+        id = strtok(token, "\n");
+        id[ID_SIZE] = '\0';
+
+        /*Put everything together*/
+        strcat(response, id);
+        response[strlen(response)] = '\0';
+        strcat(response, " \0");
+    }
+
+    /*build final response*/
+    strcpy(finalResponse, "LTR ");
+    sprintf(numberString, "%d", numberOfTopics);
+    numberString[strlen(numberString)] = '\0';
+    strcat(finalResponse, numberString);
+    strcat(finalResponse, response);
+    finalResponse[strlen(finalResponse) - 1] = '\n';
+
+    printf("%s", finalResponse);
+    fclose(topicList);
+    free(response);
+    free(line);
+    return finalResponse;
 }
 
 void handleKill(int sig){
