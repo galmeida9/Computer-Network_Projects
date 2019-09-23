@@ -14,7 +14,6 @@
 #define BUFFER_SIZE 128
 #define ID_SIZE 5
 #define TOPIC_LIST "topics/List_of_Topics.txt"
-#define TOPIC_DESCRIPTION = "/_description.txt"
 
 int nUDP, nTCP, fdUDP, fdTCP, newfd;
 socklen_t addrlenUDP, addrlenTCP;
@@ -43,23 +42,23 @@ int main(int argc, char** argv){
 
     printf("Welcome to RC Forum\n");
 
-    /*Get port from arguments*/
-    int opt; 
+    // /*Get port from arguments*/
+    // int opt; 
 
-    if (argc == 2){
-        printf("The port is missing.\n");
-        exit(1);
-    }
+    // if (argc == 2){
+    //     printf("The port is missing.\n");
+    //     exit(1);
+    // }
        
-    while((opt = getopt(argc, argv, "p:")) != -1) {  
-        switch(opt) {   
-            case 'p':
-                strcpy(port, optarg);
-                break;
-        }
-    }
+    // while((opt = getopt(argc, argv, "p:")) != -1) {  
+    //     switch(opt) {   
+    //         case 'p':
+    //             strcpy(port, optarg);
+    //             break;
+    //     }
+    // }
 
-    printf("Port: %s\n", port);
+    // printf("Port: %s\n", port);
 
     /*UDP Server*/
     memset(&hintsUDP,0, sizeof(hintsUDP));
@@ -121,12 +120,13 @@ int main(int argc, char** argv){
             if (FD_ISSET(fdUDP, &readset)){
                 printf("\nUDP\n");
                 int addrlen = sizeof(addrUDP);
+                char *bufferUDP = malloc(sizeof(char) * BUFFER_SIZE);
 
-                nMsg = recvfrom(fdUDP, buffer, BUFFER_SIZE, 0, (struct sockaddr*) &addrUDP, &addrlen);
+                nMsg = recvfrom(fdUDP, bufferUDP, BUFFER_SIZE, 0, (struct sockaddr*) &addrUDP, &addrlen);
                 if (nMsg == -1) /*error*/ exit(1);
 
                 /*Analyze message*/
-                char *response = processUDPMessage(buffer, BUFFER_SIZE);
+                char *response = processUDPMessage(strtok(bufferUDP, "\n"), BUFFER_SIZE);
                 //write(1, "received: ", 10); write(1, buffer, nMsg);
 
                 /*Send response*/
@@ -134,6 +134,7 @@ int main(int argc, char** argv){
                 if (nMsg == -1) /*error*/ exit(1);
 
                 free(response);
+                free(bufferUDP);
             }
             else if (FD_ISSET(fdTCP, &readset)){
                 printf("\nTCP\n");
@@ -171,7 +172,8 @@ char* processUDPMessage(char* buffer, int len){
         return response;
     }
 
-    else if (strcmp(command, "LTP\n") == 0) {
+    else if (strcmp(command, "LTP") == 0) {
+        printf("Entrei\n");
         response = listOfTopics();
         return response;
     }
@@ -188,7 +190,10 @@ int checkIfStudentCanRegister(int number){
     char line[6] = "";
     while (fgets(line, sizeof(line), fp)){
         currNumber = atoi(line);
-        if (currNumber == number) return 1;
+        if (currNumber == number) {
+            fclose(fp);
+            return 1;
+        }
     }
     fclose(fp);
     return 0;
@@ -227,49 +232,46 @@ char* listOfTopics() {
     char *line;
     size_t len = 0;
     ssize_t nread;
-    FILE *topicList, *topic;
+    FILE *topicList;
 
     strcpy(response, " ");
     topicList = fopen(TOPIC_LIST, "r");
     if (topicList == NULL) exit(1);
 
     while ((nread = getline(&line, &len, topicList)) != -1) {
-        char *descritionPath = malloc(sizeof(char) * BUFFER_SIZE);
-        strcpy(descritionPath, "topics/\0");
+        char *token;
+        char *id;
         numberOfTopics++;
 
         /*Get topic: in string*/
-        strcat(response, strtok(line, "\n"));
-        response[strlen(response) - 1] = '\0';
+        token = strtok(line, ":");
+        strcat(response, token);
+        response[strlen(response)] = '\0';
         strcat(response, ":\0");
 
-        /*Get the path for the description of the topic*/
-        strcat(descritionPath, strtok(line, "\n"));
-        descritionPath[strlen(descritionPath) - 1] = '\0';
-        strcat(descritionPath, "/_description.txt\0");
-        printf("path: %s\n", descritionPath);
-        
-        /*Get the user who requested the topic*/
-        topic = fopen(descritionPath, "r");
-        if (topic == NULL) exit(1);
-        getline(&line, &len, topic);
+        /*Get user ID*/
+        token = strtok(NULL, ":");
+        id = strtok(token, "\n");
+        id[ID_SIZE] = '\0';
 
-        /*concat the topic with the user*/
-        strcat(response, line);
+        /*Put everything together*/
+        strcat(response, id);
         response[strlen(response)] = '\0';
         strcat(response, " \0");
-        printf("line %s\n", response);
     }
 
     /*build final response*/
     strcpy(finalResponse, "LTR ");
     sprintf(numberString, "%d", numberOfTopics);
-    numberString[strlen(numberString) - 1] = '\0';
+    numberString[strlen(numberString)] = '\0';
     strcat(finalResponse, numberString);
     strcat(finalResponse, response);
     finalResponse[strlen(finalResponse) - 1] = '\n';
 
     printf("%s", finalResponse);
+    fclose(topicList);
+    free(response);
+    free(line);
     return finalResponse;
 }
 
