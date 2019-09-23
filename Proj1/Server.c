@@ -14,32 +14,6 @@
 #define BUFFER_SIZE 128
 #define ID_SIZE 5
 
-int nUDP, nTCP, fdUDP, fdTCP, newfd;
-socklen_t addrlenUDP, addrlenTCP;
-struct addrinfo hintsUDP, hintsTCP, *resUDP, *resTCP;
-struct sockaddr_in addrUDP, addrTCP;
-char buffer[BUFFER_SIZE];
-
-char* processUDPMessage(char* buffer, int len);
-int checkIfStudentCanRegister(int number);
-char* registerNewStudent(char* arg1);
-void handleKill(int sig);
-
-int main(int argc, char** argv){
-    char port[6];
-    struct sigaction handle_kill;
-    sigset_t int_set;
-    sigemptyset(&int_set);
-    sigaddset(&int_set, SIGINT);
-    handle_kill.sa_handler = handleKill;
-    handle_kill.sa_flags = SA_RESTART;
-    sigemptyset(&handle_kill.sa_mask);
-    sigaction(SIGINT, &handle_kill, NULL);
-
-    strcpy(port, PORT);
-
-    printf("Welcome to RC Forum\n");
-
     /*Get port from arguments*/
     int opt; 
 
@@ -118,18 +92,29 @@ int main(int argc, char** argv){
             if (FD_ISSET(fdUDP, &readset)){
                 printf("\nUDP\n");
                 int addrlen = sizeof(addrUDP);
+                char *bufferUDP = malloc(sizeof(char) * BUFFER_SIZE);
 
+<<<<<<< HEAD
                 nMsg = recvfrom(fdUDP, buffer, BUFFER_SIZE, 0, (struct sockaddr*) &addrUDP, &addrlen);
                 if (nMsg == -1) /*error*/ exit(1);
 
                 /*Analyze message*/
                 char *response = processUDPMessage(buffer, BUFFER_SIZE);
+=======
+                nMsg = recvfrom(fdUDP, bufferUDP, BUFFER_SIZE, 0, (struct sockaddr*) &addrUDP, &addrlen);
+                if (nMsg == -1) /*error*/ exit(1);
+
+                /*Analyze message*/
+                char *response = processUDPMessage(strtok(bufferUDP, "\n"), BUFFER_SIZE);
+>>>>>>> master
                 //write(1, "received: ", 10); write(1, buffer, nMsg);
 
                 /*Send response*/
                 nMsg = sendto(fdUDP, response, strlen(response), 0, (struct sockaddr*) &addrUDP, addrlen);
                 if (nMsg == -1) /*error*/ exit(1);
 
+                free(response);
+                free(bufferUDP);
             }
             else if (FD_ISSET(fdTCP, &readset)){
                 printf("\nTCP\n");
@@ -156,6 +141,7 @@ int main(int argc, char** argv){
 }
 
 char* processUDPMessage(char* buffer, int len){
+<<<<<<< HEAD
     const char s[2] = " ";
     char command[4] = "NUL", *arg1, *response;
 
@@ -176,10 +162,28 @@ char* processUDPMessage(char* buffer, int len){
     
     if (!strcmp(command, "REG")){
         response = registerNewStudent(arg1);
+=======
+    char *command, *response;
+    size_t size;
+
+    command = strtok(buffer, " ");
+
+    if (strcmp(command, "REG") == 0) {
+        command = strtok(NULL, " ");
+        response = registerNewStudent(command);
         return response;
     }
+
+    else if (strcmp(command, "LTP") == 0) {
+        printf("Entrei\n");
+        response = listOfTopics();
+>>>>>>> master
+        return response;
+    }
+
     else {
         printf("Command not found.\n");
+        return NULL;
     }
 }
 
@@ -189,7 +193,10 @@ int checkIfStudentCanRegister(int number){
     char line[6] = "";
     while (fgets(line, sizeof(line), fp)){
         currNumber = atoi(line);
-        if (currNumber == number) return 1;
+        if (currNumber == number) {
+            fclose(fp);
+            return 1;
+        }
     }
     fclose(fp);
     return 0;
@@ -220,6 +227,60 @@ char* registerNewStudent(char* arg1){
     return response;
 }
 
+<<<<<<< HEAD
+=======
+char* listOfTopics() {
+    int numberOfTopics = 0;
+    char *response = malloc(sizeof(char) * BUFFER_SIZE);
+    char *finalResponse = malloc(sizeof(char) * BUFFER_SIZE);
+    char numberString[6];
+    char *line;
+    size_t len = 0;
+    ssize_t nread;
+    FILE *topicList;
+
+    strcpy(response, " ");
+    topicList = fopen(TOPIC_LIST, "r");
+    if (topicList == NULL) exit(1);
+
+    while ((nread = getline(&line, &len, topicList)) != -1) {
+        char *token;
+        char *id;
+        numberOfTopics++;
+
+        /*Get topic: in string*/
+        token = strtok(line, ":");
+        strcat(response, token);
+        response[strlen(response)] = '\0';
+        strcat(response, ":\0");
+
+        /*Get user ID*/
+        token = strtok(NULL, ":");
+        id = strtok(token, "\n");
+        id[ID_SIZE] = '\0';
+
+        /*Put everything together*/
+        strcat(response, id);
+        response[strlen(response)] = '\0';
+        strcat(response, " \0");
+    }
+
+    /*build final response*/
+    strcpy(finalResponse, "LTR ");
+    sprintf(numberString, "%d", numberOfTopics);
+    numberString[strlen(numberString)] = '\0';
+    strcat(finalResponse, numberString);
+    strcat(finalResponse, response);
+    finalResponse[strlen(finalResponse) - 1] = '\n';
+
+    printf("%s", finalResponse);
+    fclose(topicList);
+    free(response);
+    free(line);
+    return finalResponse;
+}
+
+>>>>>>> master
 void handleKill(int sig){
     freeaddrinfo(resUDP);
     freeaddrinfo(resTCP);
