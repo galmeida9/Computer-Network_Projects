@@ -42,23 +42,23 @@ int main(int argc, char** argv){
 
     printf("Welcome to RC Forum\n");
 
-    // /*Get port from arguments*/
-    // int opt; 
+    /*Get port from arguments*/
+    int opt; 
 
-    // if (argc == 2){
-    //     printf("The port is missing.\n");
-    //     exit(1);
-    // }
+    if (argc == 2){
+        printf("The port is missing.\n");
+        exit(1);
+    }
        
-    // while((opt = getopt(argc, argv, "p:")) != -1) {  
-    //     switch(opt) {   
-    //         case 'p':
-    //             strcpy(port, optarg);
-    //             break;
-    //     }
-    // }
+    while((opt = getopt(argc, argv, "p:")) != -1) {  
+        switch(opt) {   
+            case 'p':
+                strcpy(port, optarg);
+                break;
+        }
+    }
 
-    // printf("Port: %s\n", port);
+    printf("Port: %s\n", port);
 
     /*UDP Server*/
     memset(&hintsUDP,0, sizeof(hintsUDP));
