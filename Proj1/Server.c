@@ -208,7 +208,7 @@ char* registerNewStudent(char* arg1){
 
     if (stuNumber == 0) {
         printf("Number error.\n");
-        response = strdup("RGR NOK\n");
+        response = strdup("NOK\n");
         return response;
     }
 
@@ -223,7 +223,7 @@ char* registerNewStudent(char* arg1){
 
     /*TODO: Register on file??*/
 
-    response = strdup("RGR OK\n");
+    response = strdup("OK\n");
     return response;
 }
 
