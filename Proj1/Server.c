@@ -14,17 +14,26 @@
 #define BUFFER_SIZE 128
 #define ID_SIZE 5
 #define TOPIC_LIST "topics/List_of_Topics.txt"
+#define MAX_TOPICS 99
 
 int nUDP, nTCP, fdUDP, fdTCP, newfd;
 socklen_t addrlenUDP, addrlenTCP;
 struct addrinfo hintsUDP, hintsTCP, *resUDP, *resTCP;
 struct sockaddr_in addrUDP, addrTCP;
+
 char buffer[BUFFER_SIZE];
+int numberOfTopics = 0;
+char **listWithTopics;
 
 char* processUDPMessage(char* buffer, int len);
 int checkIfStudentCanRegister(int number);
 char* registerNewStudent(char* arg1);
 char* listOfTopics();
+char* topicPropose(char *input);
+void updateListWithTopics();
+int isTopicInList(char *topic);
+void addToTopicList(char* topic, char *usedId);
+void freeTopicInList();
 void handleKill(int sig);
 
 int main(int argc, char** argv){
@@ -105,6 +114,7 @@ int main(int argc, char** argv){
     maxFd = fdUDP > fdTCP ? fdUDP : fdTCP;
 
     printf("\n");
+    listWithTopics = (char **) malloc(sizeof(char*) * MAX_TOPICS);
     while (1) {
         int result;
         ssize_t nMsg;
@@ -127,12 +137,12 @@ int main(int argc, char** argv){
 
                 /*Analyze message*/
                 char *response = processUDPMessage(strtok(bufferUDP, "\n"), BUFFER_SIZE);
+                printf("enviou: %s", response);
                 //write(1, "received: ", 10); write(1, buffer, nMsg);
 
                 /*Send response*/
                 nMsg = sendto(fdUDP, response, strlen(response), 0, (struct sockaddr*) &addrUDP, addrlen);
                 if (nMsg == -1) /*error*/ exit(1);
-
                 free(response);
                 free(bufferUDP);
             }
@@ -161,25 +171,34 @@ int main(int argc, char** argv){
 }
 
 char* processUDPMessage(char* buffer, int len){
-    char *command, *response;
+    char *command, *response, *bufferBackup;
     size_t size;
 
+    bufferBackup = strdup(buffer);
     command = strtok(buffer, " ");
-
+    
     if (strcmp(command, "REG") == 0) {
         command = strtok(NULL, " ");
         response = registerNewStudent(command);
+        free(bufferBackup);
         return response;
     }
 
     else if (strcmp(command, "LTP") == 0) {
-        printf("Entrei\n");
         response = listOfTopics();
+        free(bufferBackup);
+        return response;
+    }
+
+    else if (strcmp(command, "PTP") == 0) {
+        response = topicPropose(bufferBackup);
+        free(bufferBackup);
         return response;
     }
 
     else {
         printf("Command not found.\n");
+        free(bufferBackup);
         return NULL;
     }
 }
@@ -225,7 +244,6 @@ char* registerNewStudent(char* arg1){
 }
 
 char* listOfTopics() {
-    int numberOfTopics = 0;
     char *response = malloc(sizeof(char) * BUFFER_SIZE);
     char *finalResponse = malloc(sizeof(char) * BUFFER_SIZE);
     char numberString[6];
@@ -233,6 +251,9 @@ char* listOfTopics() {
     size_t len = 0;
     ssize_t nread;
     FILE *topicList;
+    int addToList = 0;
+
+    if (numberOfTopics == 0) addToList = 1;
 
     strcpy(response, " ");
     topicList = fopen(TOPIC_LIST, "r");
@@ -241,11 +262,14 @@ char* listOfTopics() {
     while ((nread = getline(&line, &len, topicList)) != -1) {
         char *token;
         char *id;
-        numberOfTopics++;
 
         /*Get topic: in string*/
         token = strtok(line, ":");
         strcat(response, token);
+        if (addToList == 1) {
+            listWithTopics[numberOfTopics] = strdup(token);
+            numberOfTopics++;
+        }
         response[strlen(response)] = '\0';
         strcat(response, ":\0");
 
@@ -268,17 +292,88 @@ char* listOfTopics() {
     strcat(finalResponse, response);
     finalResponse[strlen(finalResponse) - 1] = '\n';
 
-    printf("%s", finalResponse);
     fclose(topicList);
     free(response);
     free(line);
     return finalResponse;
 }
 
+char* topicPropose(char *input) {
+    strtok(input, " ");
+    char *response;
+    char *id = strtok(NULL, " ");
+    char *topic = strtok(NULL, " ");
+
+    if (numberOfTopics == 0) updateListWithTopics();
+    
+    if (numberOfTopics == 99) response = strdup("PTR FUL\n");
+    else if (strlen(topic) > 10) response = strdup("PTR NOK\n");
+    else if (isTopicInList(topic)) response = strdup("PTR DUP\n");
+    else {
+        addToTopicList(topic, id);
+        response = strdup("PTR OK\n");
+    }
+
+    return response;
+}
+
+void updateListWithTopics() {
+    char *line;
+    size_t len = 0;
+    ssize_t nread;
+    FILE *topicList;
+
+    topicList = fopen(TOPIC_LIST, "r");
+    if (topicList == NULL) exit(1);
+
+    while ((nread = getline(&line, &len, topicList)) != -1) {
+        char *token;
+
+        token = strtok(line, ":");
+        listWithTopics[numberOfTopics] = strdup(token);
+        printf("-> %s\n", listWithTopics[numberOfTopics]);
+        numberOfTopics++;
+    }
+
+    fclose(topicList);
+    free(line);
+}
+
+int isTopicInList(char *topic) {
+    for (int i = 0; i < numberOfTopics; i++) {
+        if (strcmp(listWithTopics[i], topic) == 0) return 1;
+    }
+
+    return 0;
+}
+
+void addToTopicList(char *topic, char *usedId) {
+    FILE *topicList;
+    
+    listWithTopics[numberOfTopics] = strdup(topic);
+    numberOfTopics++;
+
+    topicList = fopen(TOPIC_LIST, "a");
+    if (topicList == NULL) exit(1);
+
+    fprintf(topicList, "%s:%s\n", topic, usedId);
+    fclose(topicList);
+
+}
+
+void freeTopicInList() {
+    for (int i = 0; i < numberOfTopics; i++) {
+        free(listWithTopics[i]);
+    }
+}
+
+
 void handleKill(int sig){
     freeaddrinfo(resUDP);
     freeaddrinfo(resTCP);
     close(fdUDP);
     close(fdTCP);
+    freeTopicInList();
+    free(listWithTopics);
     _Exit(EXIT_SUCCESS);
 }
