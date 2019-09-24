@@ -14,6 +14,8 @@
 #define ID_SIZE 5
 #define REGISTER_SIZE 12
 
+char *buffer;
+
 void parseArgs(int number, char** arguments, char **port, char **ip);
 void connectToServer(int *udp_fd, int *tcp_fd, char *ip, char *port, struct addrinfo hints, struct addrinfo **resUDP, struct addrinfo **resTCP);
 void SendMessageUDP(char *message, int fd, struct addrinfo *res);
@@ -32,7 +34,7 @@ int main(int argc, char** argv) {
     socklen_t addrlen;
     struct addrinfo hints, *resUDP, *resTCP;
     struct sockaddr_in addr;
-    char buffer[128];
+    buffer = malloc(sizeof(char) * BUFFER_SIZE);
 
     port = DEFAULT_PORT;
     ip = "127.0.0.1";
@@ -114,7 +116,6 @@ void SendMessageUDP(char *message, int fd, struct addrinfo *res) {
 
 char* receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr) {
     ssize_t n;  
-    char *buffer = malloc(sizeof(char) * BUFFER_SIZE);
     addrlen = sizeof(addr);
 
     while (buffer[(strlen(buffer) - 1)] != '\n') {
@@ -139,7 +140,6 @@ void SendMessageTCP(char *message, int fd, struct addrinfo *res) {
 
 char* receiveMessageTCP(int fd) {
     ssize_t n;  
-    char *buffer = malloc(sizeof(char) * BUFFER_SIZE);
 
     n = read(fd, buffer, 128);
     if (n == -1) exit(1);
@@ -153,6 +153,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
     size_t size;
 
     while(1) {
+        memset(buffer, 0, sizeof(buffer));
         getline(&line, &size, stdin);
         command = strtok(line, " ");
 
@@ -185,7 +186,7 @@ void registerNewUser(int id, int fd, struct addrinfo *res, socklen_t addrlen, st
     snprintf(message, REGISTER_SIZE, "REG %d\n", id);
     SendMessageUDP(message, fd, res);
     char* status = receiveMessageUDP(fd, addrlen, addr);
-    strcmp(status, "OK\n") ==  0 ? printf("Registration Complete!\n") : printf("Could not register user, invalid user ID.\n");
+    strcmp(status, "RGR OK\n") ==  0 ? printf("Registration Complete!\n") : printf("Could not register user, invalid user ID.\n");
     free(message);
     free(status);
 }
