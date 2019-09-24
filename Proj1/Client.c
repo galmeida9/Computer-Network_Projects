@@ -172,6 +172,11 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
         else if ((strcmp(command, "topic_list\n") == 0 || strcmp(command, "tl\n") == 0) && *userId != -1)
             requestLTP(udp_fd, resUDP, addrlen, addr);
 
+        else if (strcmp(command, "tp\n") == 0) {
+            SendMessageUDP("PTP 12345 Minecraft\n", udp_fd, resUDP);
+            receiveMessageUDP(udp_fd, addrlen, addr);
+        }
+
         else if (strcmp(line, "exit\n") == 0) {
             free(line);
             return;
@@ -188,7 +193,6 @@ void registerNewUser(int id, int fd, struct addrinfo *res, socklen_t addrlen, st
     char* status = receiveMessageUDP(fd, addrlen, addr);
     strcmp(status, "RGR OK\n") ==  0 ? printf("Registration Complete!\n") : printf("Could not register user, invalid user ID.\n");
     free(message);
-    free(status);
 }
 
 void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr) {
@@ -205,6 +209,4 @@ void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr
         iter = strtok(NULL, " ");
         printf("%d: %s\n", i++, iter);
     }
-
-    free(ltr);
 }
