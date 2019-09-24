@@ -7,11 +7,14 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <string.h>
+#include <assert.h>
 
 #define  DEFAULT_PORT "58013"
-#define BUFFER_SIZE 128
+#define BUFFER_SIZE 2048
 #define ID_SIZE 5
 #define REGISTER_SIZE 12
+
+char *buffer;
 
 void parseArgs(int number, char** arguments, char **port, char **ip);
 void connectToServer(int *udp_fd, int *tcp_fd, char *ip, char *port, struct addrinfo hints, struct addrinfo **resUDP, struct addrinfo **resTCP);
@@ -21,6 +24,7 @@ void SendMessageTCP(char *message, int fd, struct addrinfo *res);
 char* receiveMessageTCP(int fd);
 void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP, struct addrinfo *resTCP, socklen_t addrlen, struct sockaddr_in addr);
 void registerNewUser(int id, int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr);
+void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr);
 
 int main(int argc, char** argv) {
     int *udp_fd = malloc(sizeof(int));
@@ -30,7 +34,7 @@ int main(int argc, char** argv) {
     socklen_t addrlen;
     struct addrinfo hints, *resUDP, *resTCP;
     struct sockaddr_in addr;
-    char buffer[128];
+    buffer = malloc(sizeof(char) * BUFFER_SIZE);
 
     port = DEFAULT_PORT;
     ip = "127.0.0.1";
@@ -40,7 +44,7 @@ int main(int argc, char** argv) {
     *udp_fd = -1; *tcp_fd = -1;
     connectToServer(udp_fd, tcp_fd, ip, port, hints, &resUDP, &resTCP);
 
-    int userId;
+    int userId = -1;
     parseCommands(&userId, *udp_fd, *tcp_fd, resUDP, resTCP, addrlen, addr);
 
     freeaddrinfo(resTCP);
@@ -112,13 +116,14 @@ void SendMessageUDP(char *message, int fd, struct addrinfo *res) {
 
 char* receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr) {
     ssize_t n;  
-    char *buffer = malloc(sizeof(char) * BUFFER_SIZE);
     addrlen = sizeof(addr);
 
-    n = recvfrom(fd, buffer, 128, 0, (struct sockaddr*) &addr, &addrlen);
-    if (n == -1) exit(1);
-    printf("%s\n", buffer);
+    while (buffer[(strlen(buffer) - 1)] != '\n') {
+        n = recvfrom(fd, buffer, BUFFER_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
+        if (n == -1) exit(1);
+    }
 
+    printf("%s\n", buffer);
     return buffer;
 }
 
@@ -135,7 +140,6 @@ void SendMessageTCP(char *message, int fd, struct addrinfo *res) {
 
 char* receiveMessageTCP(int fd) {
     ssize_t n;  
-    char *buffer = malloc(sizeof(char) * BUFFER_SIZE);
 
     n = read(fd, buffer, 128);
     if (n == -1) exit(1);
@@ -149,6 +153,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
     size_t size;
 
     while(1) {
+        memset(buffer, 0, sizeof(buffer));
         getline(&line, &size, stdin);
         command = strtok(line, " ");
 
@@ -163,11 +168,15 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
                 printf("Invalid command.\n");
             }
         }
+
+        else if ((strcmp(command, "topic_list\n") == 0 || strcmp(command, "tl\n") == 0) && *userId != -1)
+            requestLTP(udp_fd, resUDP, addrlen, addr);
+
         else if (strcmp(line, "exit\n") == 0) {
             free(line);
             return;
         }
-        else printf("Invalid command.\n");
+        else *userId == -1 ? printf("You need to register first before performing any commands.\n") : printf("Invalid command.\n");
     }
 }
 
@@ -177,7 +186,25 @@ void registerNewUser(int id, int fd, struct addrinfo *res, socklen_t addrlen, st
     snprintf(message, REGISTER_SIZE, "REG %d\n", id);
     SendMessageUDP(message, fd, res);
     char* status = receiveMessageUDP(fd, addrlen, addr);
-    strcmp(status, "OK\n") ==  0 ? printf("Registration Complete!\n") : printf("Could not register user, invalid user ID.\n");
+    strcmp(status, "RGR OK\n") ==  0 ? printf("Registration Complete!\n") : printf("Could not register user, invalid user ID.\n");
     free(message);
     free(status);
+}
+
+void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr) {
+    int i = 1, N;
+    char * iter, * ltr;
+
+    SendMessageUDP("LTP\n", fd, res);
+    ltr = receiveMessageUDP(fd, addrlen, addr);
+
+    assert(!strcmp(strtok(ltr, " "), "LTR"));
+    N = atoi(strtok(NULL, " "));
+
+    while (i <= N) {
+        iter = strtok(NULL, " ");
+        printf("%d: %s\n", i++, iter);
+    }
+
+    free(ltr);
 }
