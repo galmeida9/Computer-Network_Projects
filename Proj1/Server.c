@@ -212,7 +212,7 @@ char* registerNewStudent(char* arg1){
     int enabled = checkIfStudentCanRegister(stuNumber);
     if (!enabled) {
         printf("Register %d: refused.\n", stuNumber);    
-        response = strdup("NOK\n");
+        response = strdup("RGR NOK\n");
         return response;
     }
 
