@@ -10,7 +10,7 @@
 #include <assert.h>
 
 #define  DEFAULT_PORT "58013"
-#define BUFFER_SIZE 512
+#define BUFFER_SIZE 2048
 #define ID_SIZE 5
 #define REGISTER_SIZE 12
 
