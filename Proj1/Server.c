@@ -94,19 +94,11 @@
                 int addrlen = sizeof(addrUDP);
                 char *bufferUDP = malloc(sizeof(char) * BUFFER_SIZE);
 
-<<<<<<< HEAD
-                nMsg = recvfrom(fdUDP, buffer, BUFFER_SIZE, 0, (struct sockaddr*) &addrUDP, &addrlen);
-                if (nMsg == -1) /*error*/ exit(1);
-
-                /*Analyze message*/
-                char *response = processUDPMessage(buffer, BUFFER_SIZE);
-=======
                 nMsg = recvfrom(fdUDP, bufferUDP, BUFFER_SIZE, 0, (struct sockaddr*) &addrUDP, &addrlen);
                 if (nMsg == -1) /*error*/ exit(1);
 
                 /*Analyze message*/
                 char *response = processUDPMessage(strtok(bufferUDP, "\n"), BUFFER_SIZE);
->>>>>>> master
                 //write(1, "received: ", 10); write(1, buffer, nMsg);
 
                 /*Send response*/
@@ -141,28 +133,6 @@
 }
 
 char* processUDPMessage(char* buffer, int len){
-<<<<<<< HEAD
-    const char s[2] = " ";
-    char command[4] = "NUL", *arg1, *response;
-
-    char *token;
-    int i = 0;
-    token = strtok(buffer, s);
-    while (token != NULL){
-        if (i==0) strcpy(command, token);
-        else {
-            int lenArg = strlen(token);
-            arg1 = strdup(token);
-        }
-        token = strtok(NULL, s);
-        i++;
-    }
-
-    printf("Command: %s, Arg: %s\n", command, arg1);
-    
-    if (!strcmp(command, "REG")){
-        response = registerNewStudent(arg1);
-=======
     char *command, *response;
     size_t size;
 
@@ -177,7 +147,6 @@ char* processUDPMessage(char* buffer, int len){
     else if (strcmp(command, "LTP") == 0) {
         printf("Entrei\n");
         response = listOfTopics();
->>>>>>> master
         return response;
     }
 
@@ -227,8 +196,6 @@ char* registerNewStudent(char* arg1){
     return response;
 }
 
-<<<<<<< HEAD
-=======
 char* listOfTopics() {
     int numberOfTopics = 0;
     char *response = malloc(sizeof(char) * BUFFER_SIZE);
@@ -250,8 +217,6 @@ char* listOfTopics() {
 
         /*Get topic: in string*/
         token = strtok(line, ":");
-        strcat(response, token);
-        response[strlen(response)] = '\0';
         strcat(response, ":\0");
 
         /*Get user ID*/
@@ -280,7 +245,6 @@ char* listOfTopics() {
     return finalResponse;
 }
 
->>>>>>> master
 void handleKill(int sig){
     freeaddrinfo(resUDP);
     freeaddrinfo(resTCP);
