@@ -26,6 +26,7 @@ int numberOfTopics = 0;
 char **listWithTopics;
 
 char* processUDPMessage(char* buffer, int len);
+char* processTCPMessage(char* buffer, int len);
 int checkIfStudentCanRegister(int number);
 char* registerNewStudent(char* arg1);
 char* listOfTopics();
@@ -34,6 +35,8 @@ void updateListWithTopics();
 int isTopicInList(char *topic);
 void addToTopicList(char* topic, char *usedId);
 void freeTopicInList();
+char* questionGet(char *input);
+char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOfAnswers);
 void handleKill(int sig);
 
 int main(int argc, char** argv){
@@ -148,18 +151,25 @@ int main(int argc, char** argv){
             }
             else if (FD_ISSET(fdTCP, &readset)){
                 printf("\nTCP\n");
+                char *bufferTCP = malloc(sizeof(char) * BUFFER_SIZE);
 
                 if ((newfd = accept(fdTCP, (struct sockaddr*) &addrTCP, &addrlenTCP)) == -1) exit(1);
 
                 /*Analyze message*/
-                nMsg = read(newfd, buffer, BUFFER_SIZE);
+                nMsg = read(newfd, bufferTCP, BUFFER_SIZE);
                 if (nMsg == -1) exit(1);
+
+                char *response = processTCPMessage(strtok(bufferTCP, "\n"), BUFFER_SIZE);
+                printf("enviou: %s", response);
 
                 //write(1, "received: ", 10); write(1, buffer, nMsg);
 
                 /*Send response*/
-                nMsg = write(newfd, buffer, nMsg);
+                nMsg = write(newfd, response, strlen(response));
                 if (nMsg == -1) exit(1);
+
+                free(response);
+                free(bufferTCP);
             }
         }
     }
@@ -197,7 +207,29 @@ char* processUDPMessage(char* buffer, int len){
     }
 
     else if (strcmp(command, "GQU") == 0) {
+        response = questionGet(bufferBackup);
+        free(bufferBackup);
+        return response;
+    }
 
+    else {
+        printf("Command not found.\n");
+        free(bufferBackup);
+        return NULL;
+    }
+}
+
+char* processTCPMessage(char* buffer, int len){
+    char *command, *response, *bufferBackup;
+    size_t size;
+
+    bufferBackup = strdup(buffer);
+    command = strtok(buffer, " ");
+
+    if (strcmp(command, "GQU") == 0) {
+        response = questionGet(bufferBackup);
+        free(bufferBackup);
+        return response;
     }
 
     else {
@@ -344,6 +376,8 @@ void updateListWithTopics() {
 }
 
 int isTopicInList(char *topic) {
+    if (numberOfTopics == 0) updateListWithTopics();
+
     for (int i = 0; i < numberOfTopics; i++) {
         if (strcmp(listWithTopics[i], topic) == 0) return 1;
     }
@@ -371,27 +405,101 @@ void freeTopicInList() {
     }
 }
 
-void questionGet(char *input) {
+char* questionGet(char *input) {
     strtok(input, " ");
+
+    char *response;
     char *topic = strtok(NULL, " ");
     char *question = strtok(NULL, " ");
+    char *leftover = strtok(NULL, " ");
+
+    if (topic == NULL) {
+        response = strdup("QGR ERR\n");
+        return response;
+    }
+    else if (!isTopicInList(topic)) {
+        response = strdup("QGR EOF\n");
+        return response;
+    }
+
+    if (question == NULL) {
+        response = strdup("QGR ERR\n");
+        return response;
+    }
+
+    if (leftover != NULL) {
+        response = strdup("QGR ERR\n");
+        return response;
+    }
+
     char *path = malloc(sizeof(char) * BUFFER_SIZE);
 
-    path = strdup("topics/\0");
+    strcpy(path, "topics/");
     strcat(path, topic);
-    path[strlen(topic) - 1] = '\0';
-    strcat(path, "/_questions.txt\0");
+    path[strlen(path)] = '\0';
+    char *topicFolderPath = strdup(path);
+    strcat(path, "/_questions.txt");
 
+    int foundQuestion = 0;
+    int qUserId;
+    int numberOfAnswers;
     char *line;
     size_t len = 0;
     ssize_t nread;
     FILE *questionsFd;
+   
     questionsFd = fopen(path, "r");
     if (questionsFd == NULL) exit(1);
 
     while ((nread = getline(&line, &len, questionsFd)) != -1) {
-        printf("line: %s", line);
+        char *token = strtok(line, ":");
+        if (strcmp(token, question) == 0) {
+            foundQuestion = 1;
+            qUserId = atoi(strtok(NULL, ":"));
+            numberOfAnswers = atoi(strtok(NULL, ":"));
+            break;
+        }
     }
+
+    if (!foundQuestion) {
+        response = strdup("QGR EOF\n");
+        return response;
+    }
+
+    response = questionGetReadFiles(topicFolderPath, question, qUserId, numberOfAnswers);
+    return response;
+}
+
+char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOfAnswers) {
+    char *questionPath = malloc(sizeof(char) * BUFFER_SIZE);
+    strcpy(questionPath, path);
+    questionPath[strlen(questionPath)] = '/';
+    questionPath[strlen(questionPath)] = '\0';
+    strcat(questionPath, question);
+    questionPath[strlen(questionPath)] = '\0';
+    strcat(questionPath, ".txt");
+
+    size_t len = 0;
+    ssize_t nread;
+    FILE *questionFd;
+    questionFd = fopen(questionPath, "r");
+    if (questionFd == NULL) exit(1);
+
+    char *line;
+    char *qdata;
+    if ((nread = getline(&line, &len, questionFd)) != -1) {
+        getline(&line, &len, questionFd);
+        qdata = strtok(line, "\n");
+    }
+
+    fseek(questionFd, 0L, SEEK_END);
+    long qsize = ftell(questionFd);
+
+    fclose(questionFd);
+    char *response = malloc(sizeof(char) * BUFFER_SIZE);
+    snprintf(response, BUFFER_SIZE, "QGR %d %ld %s 0 %d\n", qUserId, qsize, qdata, numberOfAnswers);
+    printf("response: %s\n", response);
+    return response;
 }
 
 void handleKill(int sig){

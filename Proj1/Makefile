@@ -4,7 +4,7 @@ LDFLAGS = -lm
 
 all:
 	$(CC) Client.c -o user $(LDFLAGS)
-	$(CC) Server.c -o FS $(LDFLAGS)
+	$(CC) Server.c -g -o FS $(LDFLAGS)
 
 clean:
 	rm -f user FS

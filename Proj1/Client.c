@@ -145,15 +145,18 @@ void SendMessageTCP(char *message, int fd, struct addrinfo *res) {
 
     n = write(fd, message, strlen(message));
     if (n == -1) exit(1);
-    printf("enviei\n");
 }
 
 char* receiveMessageTCP(int fd) {
     ssize_t n;  
+    buffer[0] = '\0';
 
-    n = read(fd, buffer, BUFFER_SIZE);
-    if (n == -1) exit(1);
-    printf("%s\n", buffer);
+    while (strtok(buffer, "\n") == NULL) {
+        n = read(fd, buffer, BUFFER_SIZE);
+        if (n == -1) exit(1);
+    }
+    
+    if (debug == 1) printf("Received: |%s|\n", buffer);
 
     return buffer;
 }
@@ -212,6 +215,11 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
         else if (strcmp(command, "tp\n") == 0) {
             SendMessageUDP("PTP 12345 Minecraft\n", udp_fd, resUDP);
             receiveMessageUDP(udp_fd, addrlen, addr);
+        }
+
+        else if (strcmp(command, "qg\n") == 0) {
+            SendMessageTCP("GQU RC pergunta\n", tcp_fd, resTCP);
+            receiveMessageTCP(tcp_fd);
         }
 
         else if (strcmp(line, "exit\n") == 0) {
