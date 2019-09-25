@@ -15,8 +15,6 @@
 #define REGISTER_SIZE 12
 #define NUM_TOPICS 99
 
-char *buffer;
-
 void parseArgs(int number, char** arguments, char **port, char **ip);
 void connectToServer(int *udp_fd, int *tcp_fd, char *ip, char *port, struct addrinfo hints, struct addrinfo **resUDP, struct addrinfo **resTCP);
 void SendMessageUDP(char *message, int fd, struct addrinfo *res);
@@ -29,6 +27,9 @@ void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr
 void freeTopics(int numTopics, char** topics);
 char* topicSelectNum(int numTopics, char** topics, int topicChosen);
 char* topicSelectName(int numTopics, char** topics, char* name);
+
+char *buffer;
+int debug = 0;
 
 int main(int argc, char** argv) {
     int *udp_fd = malloc(sizeof(int));
@@ -65,7 +66,7 @@ int main(int argc, char** argv) {
 void parseArgs(int number, char** arguments, char **port, char **ip) {
     int opt; 
        
-    while((opt = getopt(number, arguments, "n:p:")) != -1) {  
+    while((opt = getopt(number, arguments, "n:p:d")) != -1) {  
         switch(opt) {   
             case 'n':  
                 if (optarg == NULL || strcmp(optarg, "-p") == 0) {
@@ -81,6 +82,8 @@ void parseArgs(int number, char** arguments, char **port, char **ip) {
                 }
                 *port = strdup(optarg);
                 break;  
+            case 'd':
+                debug = 1;
         }  
     }
 }
@@ -124,10 +127,12 @@ char* receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr) {
     addrlen = sizeof(addr);
     buffer[0] = '\0';
 
-    while (buffer[(strlen(buffer) - 1)] != '\n') {
+    while (strtok(buffer, "\n") == NULL) {
         n = recvfrom(fd, buffer, BUFFER_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
         if (n == -1) exit(1);
     }
+
+    if (debug == 1) printf("Received: |%s|\n", buffer);
 
     return buffer;
 }
@@ -226,7 +231,7 @@ void registerNewUser(int id, int fd, struct addrinfo *res, socklen_t addrlen, st
     snprintf(message, REGISTER_SIZE, "REG %d\n", id);
     SendMessageUDP(message, fd, res);
     char* status = receiveMessageUDP(fd, addrlen, addr);
-    strcmp(status, "RGR OK\n") ==  0 ? printf("Registration Complete!\n") : printf("Could not register user, invalid user ID.\n");
+    strcmp(status, "RGR OK") ==  0 ? printf("Registration Complete!\n") : printf("Could not register user, invalid user ID.\n");
     free(message);
 }
 
@@ -243,7 +248,7 @@ void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr
     while (i <= N) {
         iter = strtok(NULL, " ");
         topics[i-1] = strdup(iter);
-        i==N ? printf("%d: %s", i++, topics[i-1]) : printf("%d: %s\n", i++, topics[i-1]);
+        printf("%d: %s\n", i++, topics[i-1]);
     }
 
     *numTopics = N;

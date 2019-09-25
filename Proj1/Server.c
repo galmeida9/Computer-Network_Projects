@@ -196,6 +196,10 @@ char* processUDPMessage(char* buffer, int len){
         return response;
     }
 
+    else if (strcmp(command, "GQU") == 0) {
+
+    }
+
     else {
         printf("Command not found.\n");
         free(bufferBackup);
@@ -367,6 +371,28 @@ void freeTopicInList() {
     }
 }
 
+void questionGet(char *input) {
+    strtok(input, " ");
+    char *topic = strtok(NULL, " ");
+    char *question = strtok(NULL, " ");
+    char *path = malloc(sizeof(char) * BUFFER_SIZE);
+
+    path = strdup("topics/\0");
+    strcat(path, topic);
+    path[strlen(topic) - 1] = '\0';
+    strcat(path, "/_questions.txt\0");
+
+    char *line;
+    size_t len = 0;
+    ssize_t nread;
+    FILE *questionsFd;
+    questionsFd = fopen(path, "r");
+    if (questionsFd == NULL) exit(1);
+
+    while ((nread = getline(&line, &len, questionsFd)) != -1) {
+        printf("line: %s", line);
+    }
+}
 
 void handleKill(int sig){
     freeaddrinfo(resUDP);
