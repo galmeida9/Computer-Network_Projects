@@ -211,7 +211,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
 
         }
 
-        else if (strcmp(command, "tp") == 0) {            
+        else if (!strcmp(command, "tp") || !strcmp(command, "topic_propose")) {            
             sprintf(msg, "PTP %d %s\n", *userId, strtok(NULL, " "));
             SendMessageUDP(msg, udp_fd, resUDP);
             status = receiveMessageUDP(udp_fd, addrlen, addr);
