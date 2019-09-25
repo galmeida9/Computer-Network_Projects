@@ -206,12 +206,6 @@ char* processUDPMessage(char* buffer, int len){
         return response;
     }
 
-    else if (strcmp(command, "GQU") == 0) {
-        response = questionGet(bufferBackup);
-        free(bufferBackup);
-        return response;
-    }
-
     else {
         printf("Command not found.\n");
         free(bufferBackup);
@@ -283,7 +277,7 @@ char* listOfTopics() {
     char *response = malloc(sizeof(char) * BUFFER_SIZE);
     char *finalResponse = malloc(sizeof(char) * BUFFER_SIZE);
     char numberString[6];
-    char *line;
+    char *line = NULL;
     size_t len = 0;
     ssize_t nread;
     FILE *topicList;
@@ -354,7 +348,7 @@ char* topicPropose(char *input) {
 }
 
 void updateListWithTopics() {
-    char *line;
+    char *line = NULL;
     size_t len = 0;
     ssize_t nread;
     FILE *topicList;
@@ -443,7 +437,7 @@ char* questionGet(char *input) {
     int foundQuestion = 0;
     int qUserId;
     int numberOfAnswers;
-    char *line;
+    char *line = NULL;
     size_t len = 0;
     ssize_t nread;
     FILE *questionsFd;
@@ -461,44 +455,86 @@ char* questionGet(char *input) {
         }
     }
 
+    fclose(questionsFd);
+    free(line);
+    free(path);
+
     if (!foundQuestion) {
         response = strdup("QGR EOF\n");
+        free(topicFolderPath);
         return response;
     }
 
     response = questionGetReadFiles(topicFolderPath, question, qUserId, numberOfAnswers);
+    free(topicFolderPath);
     return response;
 }
 
 char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOfAnswers) {
+    /*Path for the requested question*/
     char *questionPath = malloc(sizeof(char) * BUFFER_SIZE);
-    strcpy(questionPath, path);
-    questionPath[strlen(questionPath)] = '/';
-    questionPath[strlen(questionPath)] = '\0';
-    strcat(questionPath, question);
-    questionPath[strlen(questionPath)] = '\0';
-    strcat(questionPath, ".txt");
+    snprintf(questionPath, BUFFER_SIZE, "%s/%s.txt", path, question);
 
+    /*Get the question in the file, check if there is a image and what is its extention*/
     size_t len = 0;
     ssize_t nread;
     FILE *questionFd;
     questionFd = fopen(questionPath, "r");
     if (questionFd == NULL) exit(1);
 
-    char *line;
+    int qIMG = 0;
+    char *qiext;
+    char *line = NULL;
     char *qdata;
     if ((nread = getline(&line, &len, questionFd)) != -1) {
         getline(&line, &len, questionFd);
-        qdata = strtok(line, "\n");
+        qdata = strtok(line, ":");
+        if (strcmp(strtok(NULL, ":"), "1") == 0) {
+            qIMG = 1;
+            qiext = strtok(NULL, ":");
+        }
     }
 
     fseek(questionFd, 0L, SEEK_END);
     long qsize = ftell(questionFd);
-
     fclose(questionFd);
+    free(questionPath);
+
+    /*If there is a image get its size and data*/
+    long qisize;
+    char *qidata;
+    if (qIMG) {
+        char *imgPath = malloc(sizeof(char) * BUFFER_SIZE);
+        FILE *imageFd;
+        snprintf(imgPath, BUFFER_SIZE, "%s/%s.%s", path, question, qiext);
+
+        imageFd = fopen(imgPath, "r");
+        if (imageFd == NULL) exit(1);
+        fseek(imageFd, 0L, SEEK_END);
+        qisize  = ftell(imageFd);
+        fseek(imageFd, 0L, SEEK_SET);
+
+        qidata = (char*) malloc(sizeof(char) * (qisize + 1));
+        strcpy(qidata, "");
+        fread(qidata,qisize,sizeof(unsigned char),imageFd);
+
+        fclose(imageFd);
+        free(line);
+        free(imgPath);
+    }
+
     char *response = malloc(sizeof(char) * BUFFER_SIZE);
-    snprintf(response, BUFFER_SIZE, "QGR %d %ld %s 0 %d\n", qUserId, qsize, qdata, numberOfAnswers);
-    printf("response: %s\n", response);
+    if (qIMG) {
+        snprintf(response, BUFFER_SIZE, "QGR %d %ld %s 1 %s %ld %s %d\n", qUserId, qsize, qdata, qiext, qisize, qidata, numberOfAnswers);
+        free(qidata);
+    }
+
+    else {
+        snprintf(response, BUFFER_SIZE, "QGR %d %ld %s 0 %d\n", qUserId, qsize, qdata, numberOfAnswers);
+    }
+
+    printf("response: %s", response);
+
     return response;
 }
 
