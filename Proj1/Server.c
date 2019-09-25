@@ -344,10 +344,8 @@ void updateListWithTopics() {
 }
 
 int isTopicInList(char *topic) {
-    for (int i = 0; i < numberOfTopics; i++) {
+    for (int i = 0; i < numberOfTopics; i++)
         if (strcmp(listWithTopics[i], topic) == 0) return 1;
-    }
-
     return 0;
 }
 
