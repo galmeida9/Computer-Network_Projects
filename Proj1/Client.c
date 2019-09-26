@@ -204,6 +204,11 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
 
         }
 
+        else if (strcmp(command, "tp\n") == 0) {
+            SendMessageUDP("PTP 12345 Minecraft\n", udp_fd, resUDP);
+            receiveMessageUDP(udp_fd, addrlen, addr);
+        }
+
         else if (strcmp(line, "exit\n") == 0) {
             freeTopics(numTopics, topics);
             free(line);
