@@ -89,7 +89,6 @@ int main(int argc, char** argv){
     
     printf("Created UDP Server\n");
     
-
     /*TCP Server*/
     memset(&hintsTCP, 0, sizeof(hintsTCP));
     hintsTCP.ai_family = AF_INET;
@@ -116,7 +115,6 @@ int main(int argc, char** argv){
     FD_ZERO(&readset);
     maxFd = fdUDP > fdTCP ? fdUDP : fdTCP;
 
-    printf("\n");
     listWithTopics = (char **) malloc(sizeof(char*) * MAX_TOPICS);
     while (1) {
         int result;
@@ -131,7 +129,7 @@ int main(int argc, char** argv){
         if (result == -1) continue;
         else {
             if (FD_ISSET(fdUDP, &readset)){
-                printf("\nUDP\n");
+                printf("\nUDP - ");
                 int addrlen = sizeof(addrUDP);
                 char *bufferUDP = malloc(sizeof(char) * BUFFER_SIZE);
 
@@ -140,8 +138,7 @@ int main(int argc, char** argv){
 
                 /*Analyze message*/
                 char *response = processUDPMessage(strtok(bufferUDP, "\n"), BUFFER_SIZE);
-                printf("enviou: %s", response);
-                //write(1, "received: ", 10); write(1, buffer, nMsg);
+                //printf("Sent: %s", response);
 
                 /*Send response*/
                 nMsg = sendto(fdUDP, response, strlen(response), 0, (struct sockaddr*) &addrUDP, addrlen);
@@ -197,6 +194,7 @@ char* processUDPMessage(char* buffer, int len){
     else if (strcmp(command, "LTP") == 0) {
         response = listOfTopics();
         free(bufferBackup);
+        printf("Sent list of topics.\n");
         return response;
     }
 
@@ -206,10 +204,25 @@ char* processUDPMessage(char* buffer, int len){
         return response;
     }
 
+    else if (strcmp(command, "GQU") == 0) {
+
+    }
+
+    else if (strcmp(command, "LQU") == 0) {
+        command = strtok(NULL, " ");
+        if (command == NULL) return strdup("ERR\n");
+
+        //TODO , now just for testing client
+        response = strdup("LQR 2 FavasBoas:56789:0 VinhoTinto:28574:0\n");
+        printf("Sent list of questions.\n");
+        return response;
+    }
+
     else {
         printf("Command not found.\n");
         free(bufferBackup);
-        return NULL;
+        response = strdup("ERR\n");
+        return response;
     }
 }
 
@@ -374,8 +387,6 @@ int isTopicInList(char *topic) {
 
     for (int i = 0; i < numberOfTopics; i++) {
         if (strcmp(listWithTopics[i], topic) == 0) return 1;
-    }
-
     return 0;
 }
 
@@ -394,9 +405,7 @@ void addToTopicList(char *topic, char *usedId) {
 }
 
 void freeTopicInList() {
-    for (int i = 0; i < numberOfTopics; i++) {
-        free(listWithTopics[i]);
-    }
+    for (int i = 0; i < numberOfTopics; i++) free(listWithTopics[i]);
 }
 
 char* questionGet(char *input) {
