@@ -22,7 +22,7 @@ void parseArgs(int number, char** arguments, char **port, char **ip);
 void connectToServer(int *udp_fd, int *tcp_fd, char *ip, char *port, struct addrinfo hints, struct addrinfo **resUDP, struct addrinfo **resTCP);
 void SendMessageUDP(char *message, int fd, struct addrinfo *res);
 char* receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr);
-void SendMessageTCP(char *message, int fd, struct addrinfo *res);
+void SendMessageTCP(char *message, int *fd, struct addrinfo **res);
 char* receiveMessageTCP(int fd);
 void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP, struct addrinfo *resTCP, socklen_t addrlen, struct sockaddr_in addr);
 void registerNewUser(int id, int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr);
@@ -35,6 +35,7 @@ void freeQuestions(int numQuestions, char** questions);
 
 char *buffer;
 int debug = 0;
+
 
 int main(int argc, char** argv) {
     int *udp_fd = malloc(sizeof(int));
@@ -62,7 +63,6 @@ int main(int argc, char** argv) {
     freeaddrinfo(resTCP);
     freeaddrinfo(resUDP);
     close(*udp_fd);
-    close(*tcp_fd);
     free(udp_fd);
     free(tcp_fd);
     return 0;
@@ -114,9 +114,6 @@ void connectToServer(int *udp_fd, int *tcp_fd, char *ip, char *port, struct addr
         hints.ai_socktype=SOCK_STREAM;
         n = getaddrinfo(ip, port, &hints, resTCP);
         if (n != 0) exit(1);
-
-        *tcp_fd = socket((*resTCP)->ai_family, (*resTCP)->ai_socktype, (*resTCP)->ai_protocol);
-        if (*tcp_fd == -1) exit(1);
     }
 }
 
@@ -142,13 +139,16 @@ char* receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr) {
     return buffer;
 }
 
-void SendMessageTCP(char *message, int fd, struct addrinfo *res) {
+void SendMessageTCP(char *message, int *fd, struct addrinfo **res) {
     ssize_t n;
 
-    n = connect(fd, res->ai_addr, res->ai_addrlen);
+    *fd = socket((*res)->ai_family, (*res)->ai_socktype, (*res)->ai_protocol);
+    if (*fd == -1) exit(1);
+    
+    n = connect(*fd, (*res)->ai_addr, (*res)->ai_addrlen);
     if (n == -1) exit(1);
 
-    n = write(fd, message, strlen(message));
+    n = write(*fd, message, strlen(message));
     if (n == -1) exit(1);
 }
 
@@ -253,8 +253,9 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
         }
 
         else if (strcmp(command, "qg\n") == 0) {
-            SendMessageTCP("GQU RC pergunta\n", tcp_fd, resTCP);
+            SendMessageTCP("GQU RC pergunta\n", &tcp_fd, &resTCP);
             receiveMessageTCP(tcp_fd);
+            close(tcp_fd);
         }
 
         else if (strcmp(line, "exit\n") == 0) {
