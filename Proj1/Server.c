@@ -11,10 +11,11 @@
 #include <netdb.h>
 
 #define PORT "58013"
-#define BUFFER_SIZE 128
+#define BUFFER_SIZE 1024
 #define ID_SIZE 5
 #define TOPIC_LIST "topics/List_of_Topics.txt"
 #define MAX_TOPICS 99
+#define AN_SIZE 3
 
 int nUDP, nTCP, fdUDP, fdTCP, newfd;
 socklen_t addrlenUDP, addrlenTCP;
@@ -36,7 +37,8 @@ int isTopicInList(char *topic);
 void addToTopicList(char* topic, char *usedId);
 void freeTopicInList();
 char* questionGet(char *input);
-char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOfAnswers);
+char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOfAnswers, int qIMG, char *qixt);
+char* getAnswerInformation(char *path, char *question, char *numb);
 void handleKill(int sig);
 
 int main(int argc, char** argv){
@@ -55,15 +57,15 @@ int main(int argc, char** argv){
     printf("Welcome to RC Forum\n");
 
     /*Get port from arguments*/
-    int opt; 
+    int opt;
 
     if (argc == 2){
         printf("The port is missing.\n");
         exit(1);
     }
-       
-    while((opt = getopt(argc, argv, "p:")) != -1) {  
-        switch(opt) {   
+
+    while((opt = getopt(argc, argv, "p:")) != -1) {
+        switch(opt) {
             case 'p':
                 strcpy(port, optarg);
                 break;
@@ -77,7 +79,7 @@ int main(int argc, char** argv){
     hintsUDP.ai_family=AF_INET;
     hintsUDP.ai_socktype=SOCK_DGRAM;
     hintsUDP.ai_flags=AI_PASSIVE|AI_NUMERICSERV;
-    
+
     nUDP = getaddrinfo(NULL, port, &hintsUDP, &resUDP);
     if (nUDP !=0 ) /*error*/ exit(1);
 
@@ -86,9 +88,9 @@ int main(int argc, char** argv){
 
     nUDP = bind(fdUDP, resUDP->ai_addr, resUDP->ai_addrlen);
     if (nUDP == -1) /*error*/ exit(1);
-    
+
     printf("Created UDP Server\n");
-    
+
     /*TCP Server*/
     memset(&hintsTCP, 0, sizeof(hintsTCP));
     hintsTCP.ai_family = AF_INET;
@@ -107,7 +109,7 @@ int main(int argc, char** argv){
     if (listen(fdTCP, 5) == -1) exit(1);
 
     printf("Created TCP Server\n");
-    
+
     /*Wait for communication*/
     int maxFd;
     fd_set readset;
@@ -123,7 +125,7 @@ int main(int argc, char** argv){
         /*Setup fd in readset*/
         FD_SET(fdUDP, &readset);
         FD_SET(fdTCP, &readset);
-        
+
         /*Select the result selector*/
         result = select(maxFd+1, &readset, NULL, NULL, NULL);
         if (result == -1) continue;
@@ -183,7 +185,7 @@ char* processUDPMessage(char* buffer, int len){
 
     bufferBackup = strdup(buffer);
     command = strtok(buffer, " ");
-    
+
     if (strcmp(command, "REG") == 0) {
         command = strtok(NULL, " ");
         response = registerNewStudent(command);
@@ -273,7 +275,7 @@ char* registerNewStudent(char* arg1){
 
     int enabled = checkIfStudentCanRegister(stuNumber);
     if (!enabled) {
-        printf("Register %d: refused.\n", stuNumber);    
+        printf("Register %d: refused.\n", stuNumber);
         response = strdup("RGR NOK\n");
         return response;
     }
@@ -348,7 +350,7 @@ char* topicPropose(char *input) {
     char *topic = strtok(NULL, " ");
 
     if (numberOfTopics == 0) updateListWithTopics();
-    
+
     if (numberOfTopics == 99) response = strdup("PTR FUL\n");
     else if (strlen(topic) > 10) response = strdup("PTR NOK\n");
     else if (isTopicInList(topic)) response = strdup("PTR DUP\n");
@@ -387,12 +389,14 @@ int isTopicInList(char *topic) {
 
     for (int i = 0; i < numberOfTopics; i++) {
         if (strcmp(listWithTopics[i], topic) == 0) return 1;
+    }
+
     return 0;
 }
 
 void addToTopicList(char *topic, char *usedId) {
     FILE *topicList;
-    
+
     listWithTopics[numberOfTopics] = strdup(topic);
     numberOfTopics++;
 
@@ -443,6 +447,8 @@ char* questionGet(char *input) {
     char *topicFolderPath = strdup(path);
     strcat(path, "/_questions.txt");
 
+    int qIMG = 0;
+    char *qiext = NULL;
     int foundQuestion = 0;
     int qUserId;
     int numberOfAnswers;
@@ -450,7 +456,7 @@ char* questionGet(char *input) {
     size_t len = 0;
     ssize_t nread;
     FILE *questionsFd;
-   
+
     questionsFd = fopen(path, "r");
     if (questionsFd == NULL) exit(1);
 
@@ -460,12 +466,15 @@ char* questionGet(char *input) {
             foundQuestion = 1;
             qUserId = atoi(strtok(NULL, ":"));
             numberOfAnswers = atoi(strtok(NULL, ":"));
+            if (strcmp(strtok(NULL, ":"), "1") == 0) {
+                qiext = strtok(NULL, ":");
+                qIMG = 1;
+            }
             break;
         }
     }
 
     fclose(questionsFd);
-    free(line);
     free(path);
 
     if (!foundQuestion) {
@@ -474,12 +483,13 @@ char* questionGet(char *input) {
         return response;
     }
 
-    response = questionGetReadFiles(topicFolderPath, question, qUserId, numberOfAnswers);
+    response = questionGetReadFiles(topicFolderPath, question, qUserId, numberOfAnswers, qIMG, qiext);
     free(topicFolderPath);
+    free(line);
     return response;
 }
 
-char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOfAnswers) {
+char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOfAnswers, int qIMG, char *qiext) {
     /*Path for the requested question*/
     char *questionPath = malloc(sizeof(char) * BUFFER_SIZE);
     snprintf(questionPath, BUFFER_SIZE, "%s/%s.txt", path, question);
@@ -491,21 +501,12 @@ char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOf
     questionFd = fopen(questionPath, "r");
     if (questionFd == NULL) exit(1);
 
-    int qIMG = 0;
-    char *qiext;
-    char *line = NULL;
-    char *qdata;
-    if ((nread = getline(&line, &len, questionFd)) != -1) {
-        getline(&line, &len, questionFd);
-        qdata = strtok(line, ":");
-        if (strcmp(strtok(NULL, ":"), "1") == 0) {
-            qIMG = 1;
-            qiext = strtok(NULL, ":");
-        }
-    }
-
     fseek(questionFd, 0L, SEEK_END);
     long qsize = ftell(questionFd);
+    fseek(questionFd, 0L, SEEK_SET);
+    char *qdata = malloc(sizeof(char) * (qsize + 1));
+    fread(qdata,qsize,sizeof(unsigned char),questionFd);
+
     fclose(questionFd);
     free(questionPath);
 
@@ -516,9 +517,9 @@ char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOf
         char *imgPath = malloc(sizeof(char) * BUFFER_SIZE);
         FILE *imageFd;
         snprintf(imgPath, BUFFER_SIZE, "%s/%s.%s", path, question, qiext);
-
         imageFd = fopen(imgPath, "r");
         if (imageFd == NULL) exit(1);
+
         fseek(imageFd, 0L, SEEK_END);
         qisize  = ftell(imageFd);
         fseek(imageFd, 0L, SEEK_SET);
@@ -528,23 +529,116 @@ char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOf
         fread(qidata,qisize,sizeof(unsigned char),imageFd);
 
         fclose(imageFd);
-        free(line);
         free(imgPath);
+    }
+
+    /*Get the answers information*/
+    char *answers = malloc(sizeof(char) * BUFFER_SIZE);
+    strcpy(answers, "");
+    for (int i = 1; i <= numberOfAnswers; i++) {
+        char *questionNumber = malloc(sizeof(char) * AN_SIZE);
+        i < 10 ? snprintf(questionNumber, AN_SIZE, "0%d", i) : snprintf(question, AN_SIZE, "%d", i);
+        char *answerInfo = getAnswerInformation(path, question, questionNumber);
+        strcat(answers, answerInfo);
+        free(questionNumber);
+        free(answerInfo);
     }
 
     char *response = malloc(sizeof(char) * BUFFER_SIZE);
     if (qIMG) {
-        snprintf(response, BUFFER_SIZE, "QGR %d %ld %s 1 %s %ld %s %d\n", qUserId, qsize, qdata, qiext, qisize, qidata, numberOfAnswers);
+        snprintf(response, BUFFER_SIZE, "QGR %d %ld %s 1 %s %ld %s %d %s\n", qUserId, qsize, qdata, qiext, qisize, qidata, numberOfAnswers, answers);
         free(qidata);
     }
 
     else {
-        snprintf(response, BUFFER_SIZE, "QGR %d %ld %s 0 %d\n", qUserId, qsize, qdata, numberOfAnswers);
+        snprintf(response, BUFFER_SIZE, "QGR %d %ld %s 0 %d %s\n", qUserId, qsize, qdata, numberOfAnswers, answers);
     }
 
-    printf("response: %s", response);
-
+    free(answers);
+    free(qdata);
     return response;
+}
+
+char* getAnswerInformation(char *path, char *question, char *numb) {
+    /*get information about the answer*/
+    char *answerDesc = malloc(sizeof(char) * BUFFER_SIZE);
+    FILE *answerDescFd;
+    snprintf(answerDesc, BUFFER_SIZE, "%s/%s_%s_desc.txt", path, question, numb);
+
+    answerDescFd = fopen(answerDesc, "r");
+    if (answerDescFd == NULL) exit(1);
+
+    int aIMG = 0;
+    char *aiext  = NULL;
+    int aUserID;
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t nread;
+
+    while ((nread = getline(&line, &len, answerDescFd)) != -1) {
+        char *token = strtok(line, ":");
+        aUserID  = atoi(token);
+        if (strcmp(strtok(NULL, ":"), "1") == 0) {
+            aiext  = strtok(NULL, ":");
+            aIMG  = 1;
+        }
+        break;
+    }
+
+    fclose(answerDescFd);
+    free(answerDesc);
+
+    /*Get the answer in the file and its size*/
+    char *answerPath = malloc(sizeof(char) * BUFFER_SIZE);
+    snprintf(answerPath, BUFFER_SIZE, "%s/%s_%s.txt", path, question, numb);
+    
+    char *adata;
+    long asize;
+    len = 0;
+    FILE *answerFd;
+    answerFd = fopen(answerPath, "r");
+    if (answerFd == NULL) exit(1);
+
+    fseek(answerFd, 0L, SEEK_END);
+    asize = ftell(answerFd);
+    fseek(answerFd, 0L, SEEK_SET);
+    adata = (char*) malloc(sizeof(char) * (asize + 1));
+    strcpy(adata, "");
+    fread(adata,asize,sizeof(unsigned char),answerFd);
+
+    fclose(answerFd);
+    free(answerPath);
+
+    /*Get the answer's image information*/
+    long aisize;
+    char *aidata;
+    char *respose = malloc(sizeof(char) * BUFFER_SIZE);
+    if (aIMG) {
+        char *imgPath = malloc(sizeof(char) * BUFFER_SIZE);
+        FILE *imageFd;
+        snprintf(imgPath, BUFFER_SIZE, "%s/%s_%s.%s", path, question, numb, aiext);
+        imageFd = fopen(imgPath, "r");
+        if (imageFd == NULL) exit(1);
+        fseek(imageFd, 0L, SEEK_END);
+        aisize = ftell(imageFd);
+        fseek(imageFd, 0L, SEEK_SET);
+
+        aidata = (char*) malloc(sizeof(char) * (aisize + 1));
+        strcpy(aidata, "");
+        fread(aidata,aisize,sizeof(unsigned char),imageFd);
+
+        fclose(imageFd);
+        free(imgPath);
+
+        snprintf(respose, BUFFER_SIZE, "%d %ld %s %d %s %s %ld %s", aUserID, asize, adata, aIMG, aiext, numb, aisize, aidata);
+        free(aidata);
+    }
+
+    else snprintf(respose, BUFFER_SIZE, "%d %ld %s 0", aUserID, asize, adata);
+
+    free(adata);
+    free(line);
+    return respose;
 }
 
 void handleKill(int sig){

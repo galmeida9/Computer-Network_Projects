@@ -36,9 +36,6 @@ void freeQuestions(int numQuestions, char** questions);
 char *buffer;
 int debug = 0;
 
-char *buffer;
-int debug = 0;
-
 int main(int argc, char** argv) {
     int *udp_fd = malloc(sizeof(int));
     int *tcp_fd = malloc(sizeof(int));
