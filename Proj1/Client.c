@@ -14,6 +14,9 @@
 #define ID_SIZE 5
 #define REGISTER_SIZE 12
 #define NUM_TOPICS 99
+#define NUM_QUESTIONS 99
+#define LEN_TOPIC 10
+#define LEN_COMMAND 3
 
 void parseArgs(int number, char** arguments, char **port, char **ip);
 void connectToServer(int *udp_fd, int *tcp_fd, char *ip, char *port, struct addrinfo hints, struct addrinfo **resUDP, struct addrinfo **resTCP);
@@ -27,6 +30,8 @@ void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr
 void freeTopics(int numTopics, char** topics);
 char* topicSelectNum(int numTopics, char** topics, int topicChosen);
 char* topicSelectName(int numTopics, char** topics, char* name);
+void getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char* topicChosen, char** questions, int* numQuestions);
+void freeQuestions(int numQuestions, char** questions);
 
 char *buffer;
 int debug = 0;
@@ -159,9 +164,10 @@ char* receiveMessageTCP(int fd) {
 }
 
 void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP, struct addrinfo *resTCP, socklen_t addrlen, struct sockaddr_in addr) {
-    int numTopics = -1;
+    int numTopics = -1, numQuestions = -1;
     char * status, msg[21];
     char *line = NULL, *command, **topics = malloc(sizeof(char*)*NUM_TOPICS), *topicChosen = NULL;
+    char **questions = malloc(sizeof(char*) * NUM_QUESTIONS);
     size_t size = 0;
     
 
@@ -186,11 +192,13 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
 
         else if ((strcmp(command, "ts") == 0) && *userId != -1){
             int topicChosenNum;
+            char *arg;
             command = strtok(NULL, " ");
             if (command != NULL) {
-                topicChosenNum = atoi(strtok(command, "\n"));
-                if (strtok(NULL, " ") != NULL) printf("Invalid command.\n");
+                arg = strtok(command, "\n");
+                if (strtok(NULL, " ") != NULL || arg == NULL) printf("Invalid command.\n");
                 else {
+                    topicChosenNum = atoi(arg);
                     topicChosen = topicSelectNum(numTopics, topics, topicChosenNum);
                     if (topicChosen != NULL) printf("Topic chosen: %s\n", topicChosen);
                 }
@@ -202,7 +210,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             command = strtok(NULL, " ");
             if (command != NULL){
                 arg = strtok(command, "\n");
-                if (strtok(NULL, " ") != NULL) printf("Invalid command.\n");
+                if (strtok(NULL, " ") != NULL || arg == NULL) printf("Invalid command.\n");
                 else {
                     topicChosen = topicSelectName(numTopics, topics, arg);
                     if (topicChosen != NULL) printf("Topic chosen: %s\n", topicChosen);
@@ -227,7 +235,22 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
 
         }
 
+        else if ((strcmp(command, "question_list\n") == 0 || strcmp(command, "ql\n") == 0) && *userId != -1){
+            getQuestionList(udp_fd, resUDP, addrlen, addr, topicChosen, questions, &numQuestions);
+        }
+
+        else if (strcmp(line, "help\n") == 0) {
+            printf("\n");
+            printf("reg (id)\t- sign in\n");
+            printf("tl\t\t- list topics\n");
+            printf("tp (topic_name)\t- propose topic\n");
+            printf("ts (topic_id)\t- select topic by id\n");
+            printf("ql\t\t- list questions of select topic\n");
+            printf("exit\t\t- exit program\n");
+        }
+
         else if (strcmp(line, "exit\n") == 0) {
+            freeQuestions(numQuestions, questions);
             freeTopics(numTopics, topics);
             free(line);
             return;
@@ -281,7 +304,7 @@ char* topicSelectNum(int numTopics, char** topics, int topicChosen){
         return NULL;
     }
 
-    if (topicChosen > numTopics){
+    if (topicChosen > numTopics || topicChosen <= 0){
         printf("Invalid topic number.\n");
         return NULL;
     }
@@ -310,4 +333,38 @@ char* topicSelectName(int numTopics, char** topics, char* name){
     if (topic == NULL) printf("Can't find that topic.\n");
 
     return topic;
+}
+
+void getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char* topicChosen, char** questions, int* numQuestions){
+    if (topicChosen == NULL){
+        printf("Select your topic first.\n");
+        return;
+    }
+
+    int N, i=1, lenMsg = LEN_COMMAND + 1 + LEN_TOPIC + 1 + 1; //
+    char *iter, *message = malloc(sizeof(char) * (lenMsg));
+
+    snprintf(message, lenMsg, "LQU %s\n", topicChosen);
+    SendMessageUDP(message, fd, res);
+    char* questionList = receiveMessageUDP(fd, addrlen, addr);
+
+    if (!strcmp(questionList,"ERR")) printf("ERROR\n");
+
+    assert(!strcmp(strtok(questionList, " "), "LQR"));
+    N = atoi(strtok(NULL, " "));
+
+    while (i <= N) {
+        iter = strtok(NULL, " ");
+        questions[i-1] = strdup(iter);
+        printf("%d: %s\n", i++, iter);
+    }
+
+    free(message);
+    *numQuestions = N;
+}
+
+void freeQuestions(int numQuestions, char** questions){
+    int i;
+    for (i=0; i<numQuestions; i++) free(questions[i]);
+    free(questions);
 }
