@@ -39,6 +39,7 @@ void freeTopicInList();
 char* questionGet(char *input);
 char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOfAnswers, int qIMG, char *qixt);
 char* getAnswerInformation(char *path, char *question, char *numb);
+char * listOfQuestions(char * topic);
 void handleKill(int sig);
 
 int main(int argc, char** argv){
@@ -214,8 +215,11 @@ char* processUDPMessage(char* buffer, int len){
         command = strtok(NULL, " ");
         if (command == NULL) return strdup("ERR\n");
 
-        //TODO , now just for testing client
+        /* TODO , now just for testing client
         response = strdup("LQR 2 FavasBoas:56789:0 VinhoTinto:28574:0\n");
+        */
+        printf("%s\n", command);
+        response = listOfQuestions(command);
         printf("Sent list of questions.\n");
         return response;
     }
@@ -639,6 +643,35 @@ char* getAnswerInformation(char *path, char *question, char *numb) {
     free(adata);
     free(line);
     return respose;
+}
+
+char * listOfQuestions(char * topic) {
+    int i = 1;
+    char path[33] = "topics/", question[16]; // TODO review size
+    char * response, * line;
+    size_t len = 0;
+
+    strcat(path, topic);
+    strcat(path, "/_questions.txt");
+    response = malloc (sizeof(char) * BUFFER_SIZE);
+    response = strdup("LQR");
+    
+    FILE *fp = fopen (path, "r");
+    if (!fp) {
+        fprintf (stderr, "error: file open failed '%s'.\n",
+                path);
+        return response;
+    }
+
+    while (getline(&line, &len, fp) != -1) {
+        char * token = strtok(line, ":");
+        snprintf(question, 16," %s", token);
+        strcat(response, question);
+    }
+
+    strcat(response, "\n");
+    fclose(fp);
+    return response;
 }
 
 void handleKill(int sig){
