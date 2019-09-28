@@ -363,7 +363,7 @@ void getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct soc
 
     if (!strcmp(questionList,"ERR") || !strcmp(strtok(questionList, " "), "LQR "))
         printf("ERROR\n");        
-    iter = strtok(NULL, " ");
+    iter = strtok(NULL, " \n");
     if (!iter) {
         printf("no available questions about %s\n", topicChosen);
         return;
@@ -371,9 +371,9 @@ void getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct soc
 
     printf("available questions about %s:\n", topicChosen);
     while (iter) {
-        questions[i-1] = strdup(iter);
+        questions[i - 1] = strdup(iter);
         printf("%d - %s\n", i++, iter);
-        iter = strtok(NULL, " ");
+        iter = strtok(NULL, " \n");
         *numQuestions++;
     }
     

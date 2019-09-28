@@ -653,7 +653,6 @@ char * listOfQuestions(char * topic) {
 
     strcat(path, topic);
     strcat(path, "/_questions.txt");
-    printf("%s\n", path);
     response = malloc (sizeof(char) * BUFFER_SIZE);
     response = strdup("LQR");
     
@@ -666,10 +665,11 @@ char * listOfQuestions(char * topic) {
 
     while (getline(&line, &len, fp) != -1) {
         char * token = strtok(line, ":");
-        snprintf(question, 16," %s\n", token);
+        snprintf(question, 16," %s", token);
         strcat(response, question);
     }
 
+    strcat(response, "\n");
     fclose(fp);
     return response;
 }
