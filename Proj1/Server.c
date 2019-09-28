@@ -91,7 +91,6 @@ int main(int argc, char** argv){
     if (nUDP == -1) /*error*/ exit(1);
 
     printf("Created UDP Server\n");
-
     /*TCP Server*/
     memset(&hintsTCP, 0, sizeof(hintsTCP));
     hintsTCP.ai_family = AF_INET;
@@ -215,9 +214,6 @@ char* processUDPMessage(char* buffer, int len){
         command = strtok(NULL, " ");
         if (command == NULL) return strdup("ERR\n");
 
-        /* TODO , now just for testing client
-        response = strdup("LQR 2 FavasBoas:56789:0 VinhoTinto:28574:0\n");
-        */
         printf("%s\n", command);
         response = listOfQuestions(command);
         printf("Sent list of questions.\n");
@@ -245,10 +241,14 @@ char* processTCPMessage(char* buffer, int len){
         return response;
     }
 
+    else if (strcmp(command, "QUS") == 0) {
+        response = strdup("QUR OK"); //TODO, just for testing
+    }
+
     else {
         printf("Command not found.\n");
         free(bufferBackup);
-        return NULL;
+        response = strdup("ERR\n");
     }
 }
 
@@ -592,7 +592,7 @@ char* getAnswerInformation(char *path, char *question, char *numb) {
     fclose(answerDescFd);
     free(answerDesc);
 
-    /*Get the answer in the file and its size*/
+    //Get answer data
     char *answerPath = malloc(sizeof(char) * BUFFER_SIZE);
     snprintf(answerPath, BUFFER_SIZE, "%s/%s_%s.txt", path, question, numb);
     
@@ -603,6 +603,7 @@ char* getAnswerInformation(char *path, char *question, char *numb) {
     answerFd = fopen(answerPath, "r");
     if (answerFd == NULL) exit(1);
 
+    //Get answer size
     fseek(answerFd, 0L, SEEK_END);
     asize = ftell(answerFd);
     fseek(answerFd, 0L, SEEK_SET);
@@ -623,10 +624,13 @@ char* getAnswerInformation(char *path, char *question, char *numb) {
         snprintf(imgPath, BUFFER_SIZE, "%s/%s_%s.%s", path, question, numb, aiext);
         imageFd = fopen(imgPath, "r");
         if (imageFd == NULL) exit(1);
+
+        //Get image size
         fseek(imageFd, 0L, SEEK_END);
         aisize = ftell(imageFd);
         fseek(imageFd, 0L, SEEK_SET);
 
+        //Get image data
         aidata = (char*) malloc(sizeof(char) * (aisize + 1));
         strcpy(aidata, "");
         fread(aidata,aisize,sizeof(unsigned char),imageFd);

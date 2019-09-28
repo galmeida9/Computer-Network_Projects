@@ -32,6 +32,7 @@ char* topicSelectNum(int numTopics, char** topics, int topicChosen);
 char* topicSelectName(int numTopics, char** topics, char* name);
 void getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char* topicChosen, char** questions, int* numQuestions);
 void freeQuestions(int numQuestions, char** questions);
+void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChosen, char* question, char* text_file, char* img_file);
 
 char *buffer;
 int debug = 0;
@@ -246,6 +247,22 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             getQuestionList(udp_fd, resUDP, addrlen, addr, topicChosen, questions, &numQuestions);
         }
 
+        else if (strcmp(command, "qg\n") == 0) {
+            SendMessageTCP("GQU RC pergunta\n", &tcp_fd, &resTCP);
+            receiveMessageTCP(tcp_fd);
+            close(tcp_fd);
+        }
+
+        else if ((strcmp(command, "question_submit") == 0 || strcmp(command, "qs") == 0) && *userId != -1){
+            char *question = NULL, *text_file = NULL, *img_file = NULL;
+            command = strtok(NULL, "\n");
+            question = strtok(command, " ");
+            text_file = strtok(NULL, " ");
+            img_file = strtok(NULL, "\n");
+            if (question == NULL || text_file == NULL) printf("Invalid arguments.\n");
+            else submitQuestion(&tcp_fd, &resTCP, *userId, topicChosen, question, text_file, img_file);
+        }
+
         else if (strcmp(line, "help\n") == 0) {
             printf("\n");
             printf("reg (id)\t- sign in\n");
@@ -254,12 +271,6 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             printf("ts (topic_id)\t- select topic by id\n");
             printf("ql\t\t- list questions of select topic\n");
             printf("exit\t\t- exit program\n");
-        }
-
-        else if (strcmp(command, "qg\n") == 0) {
-            SendMessageTCP("GQU RC pergunta\n", &tcp_fd, &resTCP);
-            receiveMessageTCP(tcp_fd);
-            close(tcp_fd);
         }
 
         else if (strcmp(line, "exit\n") == 0) {
@@ -384,4 +395,88 @@ void freeQuestions(int numQuestions, char** questions){
     int i;
     for (i=0; i<numQuestions; i++) free(questions[i]);
     free(questions);
+}
+
+void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChosen, char* question, char* text_file, char* img_file){
+    if (strlen(question) > 10){
+        printf("Question is too big.\n");
+        return;
+    }
+
+    if (strlen(text_file) == 0) return;
+
+    /*Get the question and its size*/    
+    char *adata;
+    long asize;
+    FILE *questionFd;
+
+    char *textPath = (char*)malloc(sizeof(char) * BUFFER_SIZE);
+    snprintf(textPath, BUFFER_SIZE, "%s.txt", text_file);
+
+    questionFd = fopen(textPath, "r");
+    if (questionFd == NULL) {
+        printf("Can't find file.\n");
+        free(textPath);
+        return;
+    }
+
+    //Get size of file
+    fseek(questionFd, 0L, SEEK_END);
+    asize = ftell(questionFd);
+    fseek(questionFd, 0L, SEEK_SET);
+
+    adata = (char*) malloc(sizeof(char) * (asize + 1));
+    strcpy(adata, "");
+    fread(adata,asize,sizeof(unsigned char),questionFd);
+
+    fclose(questionFd);
+
+    /*Get the question's image information*/
+    long aisize;
+    char *aidata;
+    char *response = malloc(sizeof(char) * BUFFER_SIZE);
+    if (img_file != NULL) {
+        FILE *imageFd;
+        imageFd = fopen(img_file, "r");
+        if (imageFd == NULL) {
+            printf("Can't find image file.\n");
+            free(textPath);
+            free(adata);
+            free(response);
+            return;
+        }
+
+        //Get image size
+        fseek(imageFd, 0L, SEEK_END);
+        aisize = ftell(imageFd);
+        fseek(imageFd, 0L, SEEK_SET);
+
+        aidata = (char*) malloc(sizeof(char) * (aisize + 1));
+        strcpy(aidata, "");
+        fread(aidata,aisize,sizeof(unsigned char),imageFd);
+
+        fclose(imageFd);
+
+        char *aiext = strtok(img_file, ".");
+        aiext = strtok(NULL, ".");
+
+        snprintf(response, BUFFER_SIZE, "QUS %d %s %s %ld %s 1 %s %ld %s\n", aUserID, topicChosen, question, asize, adata, aiext, aisize, aidata);
+        free(aidata);
+    }
+
+    else snprintf(response, BUFFER_SIZE, "QUS %d %s %s %ld %s 0\n", aUserID, topicChosen, question, asize, adata);
+
+    free(adata);
+    free(textPath);
+    
+    SendMessageTCP(response, fd, res);
+    free(response);
+
+    char* reply = receiveMessageTCP(*fd);
+    if (!strcmp(reply, "QUR OK")) printf("Question accepted!\n");
+    else if (!strcmp(reply, "QUR DUP")) printf("Question is a duplicate, try again.\n");
+    else if (!strcmp(reply, "QUR FUL")) printf("The question is full.\n");
+    else if (!strcmp(reply, "QUR NOK")) printf("An error has occurred, try again.\n");
+
+    close(*fd);
 }
