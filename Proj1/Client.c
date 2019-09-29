@@ -263,6 +263,12 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             else submitQuestion(&tcp_fd, &resTCP, *userId, topicChosen, question, text_file, img_file);
         }
 
+        else if ((strcmp(command, "as\n") == 0)) { //TODO
+            SendMessageTCP("ANS 12345 RC pergunta 9 123456789 0\n", &tcp_fd, &resTCP);
+            printf("%s\n",receiveMessageTCP(tcp_fd));
+            close(tcp_fd);
+        }
+
         else if (strcmp(line, "help\n") == 0) {
             printf("\n");
             printf("reg (id)\t- sign in\n");

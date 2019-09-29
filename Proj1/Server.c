@@ -13,7 +13,10 @@
 #define PORT "58013"
 #define BUFFER_SIZE 1024
 #define ID_SIZE 5
+#define TOPICNAME_SIZE 10
 #define TOPIC_LIST "topics/List_of_Topics.txt"
+#define TOPIC_FOLDER "topics/"
+#define QUESTIONS_LIST "/_questions.txt"
 #define MAX_TOPICS 99
 #define AN_SIZE 3
 
@@ -26,6 +29,7 @@ char buffer[BUFFER_SIZE];
 int numberOfTopics = 0;
 char **listWithTopics;
 
+void handleKill(int sig);
 char* processUDPMessage(char* buffer, int len);
 char* processTCPMessage(char* buffer, int len);
 int checkIfStudentCanRegister(int number);
@@ -40,7 +44,7 @@ char* questionGet(char *input);
 char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOfAnswers, int qIMG, char *qixt);
 char* getAnswerInformation(char *path, char *question, char *numb);
 char * listOfQuestions(char * topic);
-void handleKill(int sig);
+char* submitAnswer(char* input);
 
 int main(int argc, char** argv){
     char port[6];
@@ -179,6 +183,16 @@ int main(int argc, char** argv){
     close(fdTCP);
 }
 
+void handleKill(int sig){
+    freeaddrinfo(resUDP);
+    freeaddrinfo(resTCP);
+    close(fdUDP);
+    close(fdTCP);
+    freeTopicInList();
+    free(listWithTopics);
+    _Exit(EXIT_SUCCESS);
+}
+
 char* processUDPMessage(char* buffer, int len){
     char *command, *response, *bufferBackup;
     size_t size;
@@ -243,6 +257,15 @@ char* processTCPMessage(char* buffer, int len){
 
     else if (strcmp(command, "QUS") == 0) {
         response = strdup("QUR OK"); //TODO, just for testing
+        free(bufferBackup);
+        return response;
+    }
+
+    else if (strcmp(command, "ANS") == 0) {
+        printf("/%s/\n", bufferBackup);
+        response = submitAnswer(bufferBackup);
+        free(bufferBackup);
+        return response;
     }
 
     else {
@@ -445,11 +468,11 @@ char* questionGet(char *input) {
 
     char *path = malloc(sizeof(char) * BUFFER_SIZE);
 
-    strcpy(path, "topics/");
+    strcpy(path, TOPIC_FOLDER);
     strcat(path, topic);
     path[strlen(path)] = '\0';
     char *topicFolderPath = strdup(path);
-    strcat(path, "/_questions.txt");
+    strcat(path, QUESTIONS_LIST);
 
     int qIMG = 0;
     char *qiext = NULL;
@@ -649,21 +672,20 @@ char* getAnswerInformation(char *path, char *question, char *numb) {
     return respose;
 }
 
-char * listOfQuestions(char * topic) {
+char* listOfQuestions(char *topic) {
     int i = 1;
-    char path[33] = "topics/", question[16]; // TODO review size
+    char path[33] = TOPIC_FOLDER, question[16]; // TODO review size
     char * response, * line;
     size_t len = 0;
 
     strcat(path, topic);
-    strcat(path, "/_questions.txt");
+    strcat(path, QUESTIONS_LIST);
     response = malloc (sizeof(char) * BUFFER_SIZE);
     response = strdup("LQR");
     
     FILE *fp = fopen (path, "r");
     if (!fp) {
-        fprintf (stderr, "error: file open failed '%s'.\n",
-                path);
+        fprintf (stderr, "error: file open failed '%s'.\n", path);
         return response;
     }
 
@@ -678,12 +700,88 @@ char * listOfQuestions(char * topic) {
     return response;
 }
 
-void handleKill(int sig){
-    freeaddrinfo(resUDP);
-    freeaddrinfo(resTCP);
-    close(fdUDP);
-    close(fdTCP);
-    freeTopicInList();
-    free(listWithTopics);
-    _Exit(EXIT_SUCCESS);
+char* submitAnswer(char* input){
+    char *userID, *topic, *question, *asize, *adata, *adataAux, *aIMG, *iext = NULL, *isize = NULL, *idata = NULL;
+    char *response;
+
+    if (strcmp(strtok(input, " "), "ANS")) return strdup("ERR\n"); //Check if command is ANS
+    
+    //Get arguments
+    userID = strtok(NULL, " "); topic = strtok(NULL, " "); question = strtok(NULL, " ");
+    asize = strtok(NULL, " "); adataAux = strtok(NULL, "\n");
+
+    int asizeInt = atoi(asize);
+    adata = (char*) malloc(sizeof(char)*asizeInt);
+    strncpy(adata, adataAux, atoi(asize));
+
+    memcpy(input, adataAux + asizeInt+1, strlen(adataAux)-asizeInt);
+    aIMG = strtok(input, " "); iext = strtok(NULL, " "); isize = strtok(NULL, " "); idata = strtok(NULL, "\n");
+
+    //Protection against unusual number of arguments
+    if (userID == NULL || topic == NULL || question == NULL || asize == NULL || adata == NULL || aIMG == NULL) 
+        return strdup("ANR NOK\n");
+
+    //Check if topic exists
+    int found = isTopicInList(topic);
+    if (!found) return strdup("ANR NOK\n");
+
+    //Check if question exists
+    int lenQuestionPath = strlen(TOPIC_FOLDER) + strlen(topic) + strlen(QUESTIONS_LIST)+1;
+    char *questionPath = (char*) malloc(sizeof(char)* (lenQuestionPath) );
+    snprintf(questionPath, lenQuestionPath, "%s%s%s", TOPIC_FOLDER, topic, QUESTIONS_LIST);
+
+    FILE *questionListFP = fopen(questionPath, "r");
+    if (questionListFP == NULL){
+        free(questionPath);
+        return strdup("ANR NOK\n");
+    }
+
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t nread;
+
+    char *numOfAnswersInput = NULL;
+    int numOfAnswers = -1;
+    //Find question and get number of answers
+    while ((nread = getline(&line, &len, questionListFP)) != -1) {
+        char *questionAux = strtok(line,":");
+        if (!strcmp(question, questionAux)){
+            numOfAnswersInput = strtok(NULL, ":"); // Text file format:  QUESTION:USERID:N_OF_ANS
+            numOfAnswersInput = strtok(NULL, ":"); // Text file example: pergunta:12345:02
+            numOfAnswers = atoi(numOfAnswersInput);
+            break;
+        }
+    }
+    fclose(questionListFP);
+
+    //Question not found
+    if ( numOfAnswers == -1){ 
+        free(questionPath);
+        return strdup("ANR NOK\n");
+    }
+
+    //Check if answer list is full
+    if (numOfAnswers == 99){
+        free(questionPath);
+        return strdup("ANR FUL\n");
+    }
+
+    //Write answer to file
+    numOfAnswers++;
+    int lenAnswerPath = strlen(TOPIC_FOLDER) + strlen(topic) + 1 + strlen(question) + 1 + 2 + 4 + 1; //Example: question_56.txt\0
+    char *answerPath = (char*) malloc(sizeof(char)*lenAnswerPath);
+    snprintf(answerPath, lenAnswerPath, "%s%s/%s_%02d.txt", TOPIC_FOLDER, topic, question, numOfAnswers);
+    FILE *answerFP = fopen(answerPath, "w");
+    fputs(adata, answerFP);
+    fclose(answerFP);
+    
+    //Write image
+    if (aIMG == 1){
+
+    }
+
+    //TODO: write image
+    //TODO: update number of answers
+    response = strdup("ANR OK\n");
+    return response;
 }
