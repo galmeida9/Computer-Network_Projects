@@ -170,7 +170,7 @@ char* receiveMessageTCP(int fd) {
 void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP, struct addrinfo *resTCP, socklen_t addrlen, struct sockaddr_in addr) {
     int numTopics = -1, numQuestions = -1;
     char * status, msg[21];
-    char *line = NULL, *command, **topics = malloc(sizeof(char*)*NUM_TOPICS), *topicChosen = NULL, *questionChosen = "pergunta";
+    char *line = NULL, *command, **topics = malloc(sizeof(char*)*NUM_TOPICS), *topicChosen = NULL, *questionChosen = NULL;
     char **questions = malloc(sizeof(char*) * NUM_QUESTIONS);
     char *answerPath, *answerImg;
     size_t size = 0;
