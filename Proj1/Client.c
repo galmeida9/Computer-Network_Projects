@@ -8,6 +8,7 @@
 #include <netdb.h>
 #include <string.h>
 #include <assert.h>
+#include <math.h>
 
 #define  DEFAULT_PORT "58013"
 #define BUFFER_SIZE 2048
@@ -34,6 +35,8 @@ int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sock
 void freeQuestions(int numQuestions, char** questions);
 void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChosen, char* question, char* text_file, char* img_file);
 char * questionSelectNum(int question, int num_questions, char ** questions);
+void questionGet(char * reply, char * topic, char * title);
+char * questionSelectName(char * name, int num_questions, char ** questions);
 
 char *buffer;
 int debug = 0;
@@ -248,17 +251,9 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             numQuestions = getQuestionList(udp_fd, resUDP, addrlen, addr, topicChosen, questions);
         }
 
-        /*
-        else if (strcmp(command, "qg\n") == 0) {
-            SendMessageTCP("GQU RC pergunta\n", &tcp_fd, &resTCP);
-            receiveMessageTCP(tcp_fd);
-            close(tcp_fd);
-        }
-        */
-
         else if ((strcmp(command, "qg") == 0) && *userId != -1){
             int question;
-            char * arg;
+            char * arg, * reply;
             command = strtok(NULL, " ");
 
             if (command) {
@@ -268,6 +263,11 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
                 else {
                     question = atoi(arg);
                     questionChosen = questionSelectNum(question, numQuestions, questions);
+
+                    sprintf(msg, "GQU %s %s\n", topicChosen, questionChosen);
+                    SendMessageTCP(msg, &tcp_fd, &resTCP);
+                    questionGet(receiveMessageTCP(tcp_fd), topicChosen, questionChosen);
+                    close(tcp_fd);
                 }
             }
         }
@@ -281,7 +281,12 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
                 if (strtok(NULL, " ") != NULL || arg == NULL)
                     printf("Invalid command.\n");
                 else {
-                    //questionChosen = questionSelectName(numQuestions, questions, arg);
+                    questionChosen = questionSelectName(arg, numQuestions, questions);
+
+                    sprintf(msg, "GQU %s %s\n", topicChosen, questionChosen);
+                    SendMessageTCP(msg, &tcp_fd, &resTCP);
+                    questionGet(receiveMessageTCP(tcp_fd), topicChosen, questionChosen);
+                    close(tcp_fd);
                 }
             }
 
@@ -411,7 +416,7 @@ int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sock
     char * questionList = receiveMessageUDP(fd, addrlen, addr);
 
     if (!strcmp(questionList,"ERR") || !strcmp(strtok(questionList, " "), "LQR "))
-        printf("ERROR\n");        
+        printf("ERROR\n");
     iter = strtok(NULL, " \n");
     if (!iter) {
         printf("no available questions about %s\n", topicChosen);
@@ -533,9 +538,75 @@ char * questionSelectNum(int question, int num_questions, char ** questions) {
     return strtok(questions[question - 1], ":");
 }
 
-void questionGet(char * question) {
+char * questionSelectName(char * name, int num_questions, char ** questions) {
+    char * question = NULL;
+
+    if (num_questions == -1){
+        printf("Run question list first.\n");
+        return NULL;
+    }
+
+    for (int i = 0; i < num_questions; i++){
+        char * nextQuestion = strtok(questions[i],":");
+        if (!strcmp(nextQuestion, name)){
+            question = nextQuestion;
+            break;
+        }
+    }
+
+    if (!question) printf("Can't find that question.\n");
+    return question;
+}
+
+void questionGet(char * reply, char * topic, char * title) {
+    int qUserID, qsize, qisize, qIMG, offset; // delete users ?
+    int N, AN, aUserID, asize, aIMG, aisize;
+    char request[3], format[BUFFER_SIZE], * qdata, qiext[3], * qidata;
+    char * adata, aiext[3], * aidata;
+
+    sscanf(reply, "%s %d %d", request, &qUserID, &qsize);
+    qdata = malloc(sizeof(char) * qsize);
+    offset = 12 + floor(log10(abs(qsize)));
+
+    sprintf(format, "%%%dc %%d", qsize);
+    sscanf(reply + offset, format, qdata, &qIMG);
+    offset += (qsize + 3);
+
+    if (qIMG) {
+        sscanf(reply + offset, "%s %d", qiext, &qisize);
+        qidata = malloc(sizeof(char) * qisize);
+        sscanf(reply + offset, "%*s %*d %s", qidata);
+        offset += (11 + floor(log10(abs(qisize)))); // review
+    }
+
+    sscanf(reply + offset, "%d", &N);
+    offset += (2 + floor(log10(abs(N))));
+
     printf("stored files:\n");
+    printf("  %s/%s.txt", topic, title);
 
+    for (int i = 0; i < N; i++)
+        printf(", %s/%s_%02d.txt", topic, title, i + 1);
+    printf("\nQ: %s\n", qdata);
 
-    printf("Q: %s\n", question);
+    for (int i = 0; i < N; i++) {
+        // Parse relevant asnwer info -- aUserID necessary ?
+        sscanf(reply + offset, "%d %d %d", &AN, &aUserID, &asize);
+        adata = malloc(sizeof(char) * asize);
+        offset += (11 + floor(log10(abs(asize))));
+
+        // Read answer 
+        sprintf(format, "%%%dc %%d", asize);
+        sscanf(reply + offset, format, adata, &aIMG);
+        offset += asize + 3;
+
+        if (aIMG) {
+            sscanf(reply + offset, "%s %d", aiext, &aisize);
+            aidata = malloc(sizeof(char) * aisize);
+            sscanf(reply + offset, "%*s %*d %s", aidata);
+            offset += (11 + floor(log10(abs(aisize)))); // review
+        }
+
+        printf("A%02d: %s\n", i + 1, adata);
+    }
 }

@@ -540,9 +540,10 @@ char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOf
     char *answers = malloc(sizeof(char) * BUFFER_SIZE);
     strcpy(answers, "");
     for (int i = 1; i <= numberOfAnswers; i++) {
-        char *questionNumber = malloc(sizeof(char) * AN_SIZE);
+        strcat(answers, " ");
+        char * questionNumber = malloc(sizeof(char) * AN_SIZE);
         i < 10 ? snprintf(questionNumber, AN_SIZE, "0%d", i) : snprintf(question, AN_SIZE, "%d", i);
-        char *answerInfo = getAnswerInformation(path, question, questionNumber);
+        char * answerInfo = getAnswerInformation(path, question, questionNumber);
         strcat(answers, answerInfo);
         free(questionNumber);
         free(answerInfo);
@@ -550,12 +551,12 @@ char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOf
 
     char *response = malloc(sizeof(char) * BUFFER_SIZE);
     if (qIMG) {
-        snprintf(response, BUFFER_SIZE, "QGR %d %ld %s 1 %s %ld %s %d %s\n", qUserId, qsize, qdata, qiext, qisize, qidata, numberOfAnswers, answers);
+        snprintf(response, BUFFER_SIZE, "QGR %d %ld %s 1 %s %ld %s %d%s\n", qUserId, qsize, qdata, qiext, qisize, qidata, numberOfAnswers, answers);
         free(qidata);
     }
 
     else {
-        snprintf(response, BUFFER_SIZE, "QGR %d %ld %s 0 %d %s\n", qUserId, qsize, qdata, numberOfAnswers, answers);
+        snprintf(response, BUFFER_SIZE, "QGR %d %ld %s 0 %d%s\n", qUserId, qsize, qdata, numberOfAnswers, answers);
     }
 
     free(answers);
@@ -606,8 +607,11 @@ char* getAnswerInformation(char *path, char *question, char *numb) {
     fseek(answerFd, 0L, SEEK_END);
     asize = ftell(answerFd);
     fseek(answerFd, 0L, SEEK_SET);
-    adata = (char*) malloc(sizeof(char) * (asize + 1));
-    strcpy(adata, "");
+
+    //adata = (char*) malloc(sizeof(char) * (asize + 1));
+    adata = (char*) calloc(asize + 1, sizeof(char));
+    
+    //strcpy(adata, ""); ????
     fread(adata,asize,sizeof(unsigned char),answerFd);
 
     fclose(answerFd);
@@ -634,11 +638,11 @@ char* getAnswerInformation(char *path, char *question, char *numb) {
         fclose(imageFd);
         free(imgPath);
 
-        snprintf(respose, BUFFER_SIZE, "%d %ld %s %d %s %s %ld %s", aUserID, asize, adata, aIMG, aiext, numb, aisize, aidata);
+        snprintf(respose, BUFFER_SIZE, "%s %d %ld %s %d %s %ld %s", numb, aUserID, asize, adata, aIMG, aiext, aisize, aidata);
         free(aidata);
     }
 
-    else snprintf(respose, BUFFER_SIZE, "%d %ld %s 0", aUserID, asize, adata);
+    else snprintf(respose, BUFFER_SIZE, "%s %d %ld %s 0", numb, aUserID, asize, adata);
 
     free(adata);
     free(line);
