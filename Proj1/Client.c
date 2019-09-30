@@ -559,12 +559,12 @@ char * questionSelectName(char * name, int num_questions, char ** questions) {
 }
 
 void questionGet(char * reply, char * topic, char * title) {
-    int qUserID, qsize, qisize, qIMG, offset; // delete users ?
-    int N, AN, aUserID, asize, aIMG, aisize;
+    int qsize, qisize, qIMG, offset;
+    int N, AN, asize, aIMG, aisize;
     char request[3], format[BUFFER_SIZE], * qdata, qiext[3], * qidata;
     char * adata, aiext[3], * aidata;
 
-    sscanf(reply, "%s %d %d", request, &qUserID, &qsize);
+    sscanf(reply, "%s %*d %d", request, &qsize);
     qdata = malloc(sizeof(char) * qsize);
     offset = 12 + floor(log10(abs(qsize)));
 
@@ -590,8 +590,8 @@ void questionGet(char * reply, char * topic, char * title) {
     printf("\nQ: %s\n", qdata);
 
     for (int i = 0; i < N; i++) {
-        // Parse relevant asnwer info -- aUserID necessary ?
-        sscanf(reply + offset, "%d %d %d", &AN, &aUserID, &asize);
+        // Parse relevant asnwer info
+        sscanf(reply + offset, "%d %*d %d", &AN, &asize);
         adata = malloc(sizeof(char) * asize);
         offset += (11 + floor(log10(abs(asize))));
 
