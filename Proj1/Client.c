@@ -164,7 +164,6 @@ char* receiveMessageTCP(int fd) {
     }
     
     if (debug == 1) printf("Received: |%s|\n", buffer);
-    printf("received: %s", buffer);
     return buffer;
 }
 
