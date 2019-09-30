@@ -1,0 +1,8 @@
+List_of_Topics files:
+-name of topic:user who suggested it
+
+_questions file inside the topic folder:
+-name of the question:user who suggested it:number of answers:if it as image:if so its extention:
+
+answer_desc:
+-user who wrote the answer:if it has image:if so its extention:
