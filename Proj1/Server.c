@@ -21,6 +21,7 @@
 #define MAX_TOPICS 99
 #define MAX_ANSWERS 99
 #define AN_SIZE 3
+#define DISPLAY_ANSWERS 10
 
 int nUDP, nTCP, fdUDP, fdTCP, newfd;
 socklen_t addrlenUDP, addrlenTCP;
@@ -269,7 +270,8 @@ char* processTCPMessage(char* buffer, int len){
     else {
         printf("Command not found.\n");
         free(bufferBackup);
-        return NULL;
+        response = strdup("ERR\n");
+        return response;
     }
 }
 
@@ -558,9 +560,9 @@ char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOf
     /*Get the answers information*/
     char *answers = malloc(sizeof(char) * BUFFER_SIZE);
     strcpy(answers, "");
-    for (int i = 1; i <= numberOfAnswers; i++) {
+    for (int i = 1; (i <= numberOfAnswers) && (i <= DISPLAY_ANSWERS); i++) {
         strcat(answers, " ");
-        char * questionNumber = malloc(sizeof(char) * AN_SIZE);
+        char *questionNumber = malloc(sizeof(char) * AN_SIZE);
         i < 10 ? snprintf(questionNumber, AN_SIZE, "0%d", i) : snprintf(question, AN_SIZE, "%d", i);
         char * answerInfo = getAnswerInformation(path, question, questionNumber);
         strcat(answers, answerInfo);

@@ -33,7 +33,7 @@ char* topicSelectNum(int numTopics, char** topics, int topicChosen);
 char* topicSelectName(int numTopics, char** topics, char* name);
 int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char* topicChosen, char** questions);
 void freeQuestions(int numQuestions, char** questions);
-void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChosen, char* question, char* text_file, char* img_file);
+void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen, char* questionChosen, char *text_file, char *img_file);
 char * questionSelectNum(int question, int num_questions, char ** questions);
 void questionGet(char * reply, char * topic, char * title);
 char * questionSelectName(char * name, int num_questions, char ** questions);
@@ -177,7 +177,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
     char *line = NULL, *command;
     char ** topics = malloc(sizeof(char*)*NUM_TOPICS), ** questions = malloc(sizeof(char*)*NUM_QUESTIONS);
     char * topicChosen = NULL, * questionChosen = NULL;
-
+    char *answerPath, *answerImg;
     size_t size = 0;
 
     while(1) {
@@ -307,6 +307,28 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             SendMessageTCP("ANS 12345 RC pergunta 9 123456789 0\n", &tcp_fd, &resTCP);
             printf("%s\n",receiveMessageTCP(tcp_fd));
             close(tcp_fd);
+        }
+
+        else if (strcmp(command, "qg\n") == 0) {
+            SendMessageTCP("GQU RC pergunta\n", &tcp_fd, &resTCP);
+            receiveMessageTCP(tcp_fd);
+            close(tcp_fd);
+        }
+
+        else if ((strcmp(command, "question_submit") == 0 || strcmp(command, "qs") == 0) && *userId != -1){
+            char *question = NULL, *text_file = NULL, *img_file = NULL;
+            command = strtok(NULL, "\n");
+            questionChosen = strtok(command, " ");
+            text_file = strtok(NULL, " ");
+            img_file = strtok(NULL, "\n");
+            if (questionChosen == NULL || text_file == NULL) printf("Invalid arguments.\n");
+            else submitQuestion(&tcp_fd, &resTCP, *userId, topicChosen, questionChosen, text_file, img_file);
+        }
+
+        else if ((strcmp(command, "as") == 0) || (strcmp(command, "answer_submit") == 0) && *userId != -1) { //TODO
+            answerPath = strtok(NULL, " ");
+            answerImg = strtok(NULL, " ");
+            answerSubmit(tcp_fd, &resTCP, *userId, topicChosen, questionChosen, strtok(answerPath, "\n"), answerImg);
         }
 
         else if (strcmp(line, "help\n") == 0) {
@@ -530,6 +552,66 @@ void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChos
     else if (!strcmp(reply, "QUR NOK")) printf("An error has occurred, try again.\n");
 
     close(*fd);
+}
+
+void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen, char* questionChosen, char *text_file, char *img_file) {
+    size_t len = 0;
+    ssize_t nread;
+    FILE *answerFd;
+    answerFd = fopen(text_file, "r");
+    if (answerFd == NULL) {
+        printf("Can't find answer file.\n");
+        exit(1);
+    }
+
+    fseek(answerFd, 0L, SEEK_END);
+    long asize = ftell(answerFd);
+    fseek(answerFd, 0L, SEEK_SET);
+    char *adata = malloc(sizeof(char) * (asize + 1));
+    fread(adata,asize,sizeof(unsigned char),answerFd);
+    fclose(answerFd);
+
+    char *message;
+    int aIMG = 0;
+    long isize = 0;
+    if (img_file != NULL) {
+        aIMG = 1;
+        len = 0;
+        FILE *imgFd;
+        imgFd = fopen(strtok(img_file, "\n"), "r");
+        if (imgFd == NULL) {
+            printf("Can't find image file.\n");
+            exit(1);
+        }
+
+        fseek(imgFd, 0L, SEEK_END);
+        isize = ftell(imgFd);
+        fseek(imgFd, 0L, SEEK_SET);
+        char *idata = malloc(sizeof(char) * (isize + 1));
+        fread(idata,isize,sizeof(unsigned char),imgFd);
+        fclose(imgFd);
+
+        strtok(img_file, ".");
+        char *iext = strtok(NULL, ".");
+        if (strlen(iext) > 3) {
+            printf("img extention has more than 3 bytes.\n");
+            return;
+        }
+
+        message = malloc(sizeof(char) * (BUFFER_SIZE + asize + isize));
+        snprintf(message, BUFFER_SIZE + asize + isize, "ANS %d %s %s %ld %s %d %s %ld %s\n", aUserID, topicChosen, questionChosen, asize, adata, aIMG, iext, isize, idata);
+    }
+
+    else {
+        message = malloc(sizeof(char) * (BUFFER_SIZE + asize));
+        snprintf(message, BUFFER_SIZE + asize + isize, "ANS %d %s %s %ld %s %d\n", aUserID, topicChosen, questionChosen, asize, adata, aIMG);
+    }
+
+    printf("enviou: %s", message);
+
+    SendMessageTCP(message, &fd, res);
+    receiveMessageTCP(fd);
+    close(fd);
 }
 
 char * questionSelectNum(int question, int num_questions, char ** questions) {
