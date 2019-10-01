@@ -228,9 +228,6 @@ char* processUDPMessage(char* buffer, int len){
         command = strtok(NULL, " ");
         if (command == NULL) return strdup("ERR\n");
 
-        /* TODO , now just for testing client
-        response = strdup("LQR 2 FavasBoas:56789:0 VinhoTinto:28574:0\n");
-        */
         printf("%s\n", command);
         response = listOfQuestions(command);
         printf("Sent list of questions.\n");
