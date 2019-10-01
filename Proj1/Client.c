@@ -177,6 +177,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
     char *line = NULL, *command;
     char ** topics = malloc(sizeof(char*)*NUM_TOPICS), ** questions = malloc(sizeof(char*)*NUM_QUESTIONS);
     char * topicChosen = NULL, * questionChosen = NULL;
+
     size_t size = 0;
 
     while(1) {
@@ -295,11 +296,17 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
         else if ((strcmp(command, "question_submit") == 0 || strcmp(command, "qs") == 0) && *userId != -1){
             char *question = NULL, *text_file = NULL, *img_file = NULL;
             command = strtok(NULL, "\n");
-            question = strtok(command, " ");
+            questionChosen = strtok(command, " ");
             text_file = strtok(NULL, " ");
             img_file = strtok(NULL, "\n");
-            if (question == NULL || text_file == NULL) printf("Invalid arguments.\n");
-            else submitQuestion(&tcp_fd, &resTCP, *userId, topicChosen, question, text_file, img_file);
+            if (questionChosen == NULL || text_file == NULL) printf("Invalid arguments.\n");
+            else submitQuestion(&tcp_fd, &resTCP, *userId, topicChosen, questionChosen, text_file, img_file);
+        }
+
+        else if ((strcmp(command, "as\n") == 0)) { //TODO
+            SendMessageTCP("ANS 12345 RC pergunta 9 123456789 0\n", &tcp_fd, &resTCP);
+            printf("%s\n",receiveMessageTCP(tcp_fd));
+            close(tcp_fd);
         }
 
         else if (strcmp(line, "help\n") == 0) {
