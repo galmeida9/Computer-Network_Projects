@@ -670,16 +670,15 @@ char* getAnswerInformation(char *path, char *question, char *numb) {
     return respose;
 }
 
-char* listOfQuestions(char *topic) {
-    int i = 1;
-    char path[33] = TOPIC_FOLDER, question[16]; // TODO review size
-    char * response, * line;
+char * listOfQuestions(char * topic) {
+    int N = 0;
+    char path[33] = TOPIC_FOLDER;
+    char * response, * line, * question, * userID, * NA;
     size_t len = 0;
 
     strcat(path, topic);
     strcat(path, QUESTIONS_LIST);
-    response = malloc (sizeof(char) * BUFFER_SIZE);
-    response = strdup("LQR");
+    response = malloc(sizeof(char) * BUFFER_SIZE);
     
     FILE *fp = fopen (path, "r");
     if (!fp) {
@@ -687,13 +686,16 @@ char* listOfQuestions(char *topic) {
         return response;
     }
 
+    while (getline(&line, &len, fp) != -1) N++;
+    sprintf(response, "LQR %d", N);
+    rewind(fp);
+
     while (getline(&line, &len, fp) != -1) {
-        char * token = strtok(line, ":");
-        snprintf(question, 16," %s", token);
-        strcat(response, question);
+        question = strtok(line, ":"); userID = strtok(NULL, ":"); NA = strtok(NULL, ":");
+        sprintf(response,"%s %s:%s:%s", response, question, userID, NA);
     }
 
-    strcat(response, "\n");
+    strcat(response,"\n");
     fclose(fp);
     return response;
 }
