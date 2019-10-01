@@ -97,6 +97,7 @@ int main(int argc, char** argv){
     if (nUDP == -1) /*error*/ exit(1);
 
     printf("Created UDP Server\n");
+
     /*TCP Server*/
     memset(&hintsTCP, 0, sizeof(hintsTCP));
     hintsTCP.ai_family = AF_INET;
@@ -226,6 +227,9 @@ char* processUDPMessage(char* buffer, int len){
         command = strtok(NULL, " ");
         if (command == NULL) return strdup("ERR\n");
 
+        /* TODO , now just for testing client
+        response = strdup("LQR 2 FavasBoas:56789:0 VinhoTinto:28574:0\n");
+        */
         printf("%s\n", command);
         response = listOfQuestions(command);
         printf("Sent list of questions.\n");
@@ -252,23 +256,20 @@ char* processTCPMessage(char* buffer, int len){
         free(bufferBackup);
         return response;
     }
-
     else if (strcmp(command, "QUS") == 0) {
         response = strdup("QUR OK"); //TODO, just for testing
         free(bufferBackup);
         return response;
     }
-
     else if (strcmp(command, "ANS") == 0) {
         response = submitAnswer(bufferBackup);
         free(bufferBackup);
         return response;
     }
-
     else {
         printf("Command not found.\n");
         free(bufferBackup);
-        response = strdup("ERR\n");
+        return NULL;
     }
 }
 
@@ -558,9 +559,10 @@ char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOf
     char *answers = malloc(sizeof(char) * BUFFER_SIZE);
     strcpy(answers, "");
     for (int i = 1; i <= numberOfAnswers; i++) {
-        char *questionNumber = malloc(sizeof(char) * AN_SIZE);
+        strcat(answers, " ");
+        char * questionNumber = malloc(sizeof(char) * AN_SIZE);
         i < 10 ? snprintf(questionNumber, AN_SIZE, "0%d", i) : snprintf(question, AN_SIZE, "%d", i);
-        char *answerInfo = getAnswerInformation(path, question, questionNumber);
+        char * answerInfo = getAnswerInformation(path, question, questionNumber);
         strcat(answers, answerInfo);
         free(questionNumber);
         free(answerInfo);
@@ -568,12 +570,12 @@ char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOf
 
     char *response = malloc(sizeof(char) * BUFFER_SIZE);
     if (qIMG) {
-        snprintf(response, BUFFER_SIZE, "QGR %d %ld %s 1 %s %ld %s %d %s\n", qUserId, qsize, qdata, qiext, qisize, qidata, numberOfAnswers, answers);
+        snprintf(response, BUFFER_SIZE, "QGR %d %ld %s 1 %s %ld %s %d%s\n", qUserId, qsize, qdata, qiext, qisize, qidata, numberOfAnswers, answers);
         free(qidata);
     }
 
     else {
-        snprintf(response, BUFFER_SIZE, "QGR %d %ld %s 0 %d %s\n", qUserId, qsize, qdata, numberOfAnswers, answers);
+        snprintf(response, BUFFER_SIZE, "QGR %d %ld %s 0 %d%s\n", qUserId, qsize, qdata, numberOfAnswers, answers);
     }
 
     free(answers);
@@ -610,7 +612,7 @@ char* getAnswerInformation(char *path, char *question, char *numb) {
     fclose(answerDescFd);
     free(answerDesc);
 
-    //Get answer data
+    /*Get the answer in the file and its size*/
     char *answerPath = malloc(sizeof(char) * BUFFER_SIZE);
     snprintf(answerPath, BUFFER_SIZE, "%s/%s_%s.txt", path, question, numb);
     
@@ -621,12 +623,14 @@ char* getAnswerInformation(char *path, char *question, char *numb) {
     answerFd = fopen(answerPath, "r");
     if (answerFd == NULL) exit(1);
 
-    //Get answer size
     fseek(answerFd, 0L, SEEK_END);
     asize = ftell(answerFd);
     fseek(answerFd, 0L, SEEK_SET);
-    adata = (char*) malloc(sizeof(char) * (asize + 1));
-    strcpy(adata, "");
+
+    //adata = (char*) malloc(sizeof(char) * (asize + 1));
+    adata = (char*) calloc(asize + 1, sizeof(char));
+    
+    //strcpy(adata, ""); ????
     fread(adata,asize,sizeof(unsigned char),answerFd);
 
     fclose(answerFd);
@@ -642,13 +646,10 @@ char* getAnswerInformation(char *path, char *question, char *numb) {
         snprintf(imgPath, BUFFER_SIZE, "%s/%s_%s.%s", path, question, numb, aiext);
         imageFd = fopen(imgPath, "r");
         if (imageFd == NULL) exit(1);
-
-        //Get image size
         fseek(imageFd, 0L, SEEK_END);
         aisize = ftell(imageFd);
         fseek(imageFd, 0L, SEEK_SET);
 
-        //Get image data
         aidata = (char*) malloc(sizeof(char) * (aisize + 1));
         strcpy(aidata, "");
         fread(aidata,aisize,sizeof(unsigned char),imageFd);
@@ -656,11 +657,11 @@ char* getAnswerInformation(char *path, char *question, char *numb) {
         fclose(imageFd);
         free(imgPath);
 
-        snprintf(respose, BUFFER_SIZE, "%d %ld %s %d %s %s %ld %s", aUserID, asize, adata, aIMG, aiext, numb, aisize, aidata);
+        snprintf(respose, BUFFER_SIZE, "%s %d %ld %s %d %s %ld %s", numb, aUserID, asize, adata, aIMG, aiext, aisize, aidata);
         free(aidata);
     }
 
-    else snprintf(respose, BUFFER_SIZE, "%d %ld %s 0", aUserID, asize, adata);
+    else snprintf(respose, BUFFER_SIZE, "%s %d %ld %s 0", numb, aUserID, asize, adata);
 
     free(adata);
     free(line);
