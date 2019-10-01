@@ -463,14 +463,6 @@ int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sock
         iter = strtok(NULL, " \n");
         numQuestions++;
     }
-
-    printf("available questions about %s:\n", topicChosen);
-    while (iter) {
-        questions[i - 1] = strdup(iter);
-        printf("%d - %s\n", i++, iter);
-        iter = strtok(NULL, " \n");
-        *numQuestions++;
-    }
     
     free(message);
     return numQuestions;
@@ -624,6 +616,7 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
     SendMessageTCP(message, &fd, res);
     receiveMessageTCP(fd);
     close(fd);
+}
 
 char * questionSelectNum(int question, int num_questions, char ** questions) {
     if (num_questions == -1) {
