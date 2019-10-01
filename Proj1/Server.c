@@ -625,6 +625,7 @@ char* getAnswerInformation(char *path, char *question, char *numb) {
     answerFd = fopen(answerPath, "r");
     if (answerFd == NULL) exit(1);
 
+    //Get answer size
     fseek(answerFd, 0L, SEEK_END);
     asize = ftell(answerFd);
     fseek(answerFd, 0L, SEEK_SET);
@@ -648,10 +649,13 @@ char* getAnswerInformation(char *path, char *question, char *numb) {
         snprintf(imgPath, BUFFER_SIZE, "%s/%s_%s.%s", path, question, numb, aiext);
         imageFd = fopen(imgPath, "r");
         if (imageFd == NULL) exit(1);
+
+        //Get image size
         fseek(imageFd, 0L, SEEK_END);
         aisize = ftell(imageFd);
         fseek(imageFd, 0L, SEEK_SET);
 
+        //Get image data
         aidata = (char*) malloc(sizeof(char) * (aisize + 1));
         strcpy(aidata, "");
         fread(aidata,aisize,sizeof(unsigned char),imageFd);
