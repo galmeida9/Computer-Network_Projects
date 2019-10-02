@@ -33,11 +33,11 @@ char* topicSelectNum(int numTopics, char** topics, int topicChosen);
 char* topicSelectName(int numTopics, char** topics, char* name);
 int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char* topicChosen, char** questions);
 void freeQuestions(int numQuestions, char** questions);
-void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChosen, char* question, char* text_file, char* img_file);
 void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen, char* questionChosen, char *text_file, char *img_file);
 char * questionSelectNum(int question, int num_questions, char ** questions);
 void questionGet(char * reply, char * topic, char * title);
 char * questionSelectName(char * name, int num_questions, char ** questions);
+void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChosen, char* question, char* text_file, char* img_file);
 
 char *buffer;
 int debug = 0;
@@ -175,12 +175,10 @@ char* receiveMessageTCP(int fd) {
 void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP, struct addrinfo *resTCP, socklen_t addrlen, struct sockaddr_in addr) {
     int numTopics = -1, numQuestions = -1;
     char * status, msg[21];
-    
     char *line = NULL, *command;
     char ** topics = malloc(sizeof(char*)*NUM_TOPICS), ** questions = malloc(sizeof(char*)*NUM_QUESTIONS);
     char * topicChosen = NULL, * questionChosen = NULL;
     char *answerPath, *answerImg;
-
     size_t size = 0;
 
     while(1) {
@@ -212,9 +210,6 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
                 else {
                     topicChosenNum = atoi(arg);
                     topicChosen = topicSelectNum(numTopics, topics, topicChosenNum);
-                    
-                    // TODO: topic (userId)
-                    if (topicChosen != NULL) printf("selected topic: %s\n", topicChosen);
                 }
             }
         }
@@ -227,9 +222,6 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
                 if (strtok(NULL, " ") != NULL || arg == NULL) printf("Invalid command.\n");
                 else {
                     topicChosen = topicSelectName(numTopics, topics, arg);
-
-                    // TODO: topic (userId)
-                    if (topicChosen != NULL) printf("selected topic: %s\n", topicChosen);
                 }
             }
 
@@ -268,10 +260,12 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
                     question = atoi(arg);
                     questionChosen = questionSelectNum(question, numQuestions, questions);
 
-                    sprintf(msg, "GQU %s %s\n", topicChosen, questionChosen);
-                    SendMessageTCP(msg, &tcp_fd, &resTCP);
-                    questionGet(receiveMessageTCP(tcp_fd), topicChosen, questionChosen);
-                    close(tcp_fd);
+                    if (questionChosen) {
+                        sprintf(msg, "GQU %s %s\n", topicChosen, questionChosen);
+                        SendMessageTCP(msg, &tcp_fd, &resTCP);
+                        questionGet(receiveMessageTCP(tcp_fd), topicChosen, questionChosen);
+                        close(tcp_fd);
+                    }
                 }
             }
         }
@@ -287,13 +281,14 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
                 else {
                     questionChosen = questionSelectName(arg, numQuestions, questions);
 
-                    sprintf(msg, "GQU %s %s\n", topicChosen, questionChosen);
-                    SendMessageTCP(msg, &tcp_fd, &resTCP);
-                    questionGet(receiveMessageTCP(tcp_fd), topicChosen, questionChosen);
-                    close(tcp_fd);
+                    if (questionChosen) {
+                        sprintf(msg, "GQU %s %s\n", topicChosen, questionChosen);
+                        SendMessageTCP(msg, &tcp_fd, &resTCP);
+                        questionGet(receiveMessageTCP(tcp_fd), topicChosen, questionChosen);
+                        close(tcp_fd);
+                    }
                 }
             }
-
         }
 
         else if ((strcmp(command, "question_submit") == 0 || strcmp(command, "qs") == 0) && *userId != -1){
@@ -306,18 +301,6 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             else submitQuestion(&tcp_fd, &resTCP, *userId, topicChosen, questionChosen, text_file, img_file);
         }
 
-        else if ((strcmp(command, "as\n") == 0)) { //TODO
-            SendMessageTCP("ANS 12345 RC pergunta 9 123456789 0\n", &tcp_fd, &resTCP);
-            printf("%s\n",receiveMessageTCP(tcp_fd));
-            close(tcp_fd);
-        }
-
-        else if (strcmp(command, "qg\n") == 0) {
-            SendMessageTCP("GQU RC pergunta\n", &tcp_fd, &resTCP);
-            receiveMessageTCP(tcp_fd);
-            close(tcp_fd);
-        }
-
         else if ((strcmp(command, "question_submit") == 0 || strcmp(command, "qs") == 0) && *userId != -1){
             char *question = NULL, *text_file = NULL, *img_file = NULL;
             command = strtok(NULL, "\n");
@@ -328,7 +311,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             else submitQuestion(&tcp_fd, &resTCP, *userId, topicChosen, questionChosen, text_file, img_file);
         }
 
-        else if ((strcmp(command, "as") == 0) || (strcmp(command, "answer_submit") == 0) && *userId != -1) { //TODO
+        else if (((strcmp(command, "as") == 0) || (strcmp(command, "answer_submit") == 0)) && *userId != -1) { //TODO
             answerPath = strtok(NULL, " ");
             answerImg = strtok(NULL, " ");
             answerSubmit(tcp_fd, &resTCP, *userId, topicChosen, questionChosen, strtok(answerPath, "\n"), answerImg);
@@ -377,7 +360,6 @@ void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr
     N = atoi(strtok(NULL, " "));
 
     printf("available topics:\n");
-
     while (i <= N) {
         iter = strtok(NULL, " ");
 
@@ -413,11 +395,15 @@ char* topicSelectNum(int numTopics, char** topics, int topicChosen){
         return NULL;
     }
 
-    return strtok(topics[topicChosen-1], ":");
+    char *topic = strtok(topics[topicChosen-1], ":");
+    char *userId = strtok(NULL, ":");
+    printf("selected topic: %s (%s)\n", topic, userId);
+    return topic;
 }
 
 char* topicSelectName(int numTopics, char** topics, char* name){
     char* topic = NULL;
+    char* userId = NULL;
     int i;
     
     if (numTopics == -1){
@@ -427,19 +413,20 @@ char* topicSelectName(int numTopics, char** topics, char* name){
 
     for (i = 0; i < numTopics; i++){
         char *nextTopic = strtok(topics[i],":");
+        userId = strtok(NULL,":");
         if (!strcmp(nextTopic, name)){
             topic = nextTopic;
             break;
         }
     }
 
-    if (topic == NULL) printf("Can't find that topic.\n");
+    topic == NULL ? printf("Can't find that topic.\n") : printf("selected topic: %s (%s)\n", topic, userId);
 
     return topic;
 }
 
 int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char* topicChosen, char** questions){
-    int i = 1, lenMsg = LEN_COMMAND + 1 + LEN_TOPIC + 1 + 1, numQuestions = 0;
+    int i = 0, lenMsg = LEN_COMMAND + 1 + LEN_TOPIC + 1 + 1, numQuestions = 0;
     char *iter, *message = malloc(sizeof(char) * (lenMsg));
 
     if (topicChosen == NULL) { printf("Select your topic first.\n"); return -1; }
@@ -450,20 +437,22 @@ int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sock
 
     if (!strcmp(questionList,"ERR") || !strcmp(strtok(questionList, " "), "LQR "))
         printf("ERROR\n");
-    iter = strtok(NULL, " \n");
-    if (!iter) {
+    
+    numQuestions = atoi(strtok(NULL, " \n"));
+    if (!numQuestions) {
         printf("no available questions about %s\n", topicChosen);
         return -1;
     }
 
     printf("available questions about %s:\n", topicChosen);
-    while (iter) {
-        questions[i - 1] = strdup(iter);
-        printf("%d - %s\n", i++, iter);
-        iter = strtok(NULL, " \n");
-        numQuestions++;
-    }
+    while (iter = strtok(NULL, " \n"))
+        questions[i++] = strdup(iter);
     
+    for (i = 0; i < numQuestions; i++) {
+        questions[i] = strdup(strtok(questions[i], ":"));
+        printf("%d - %s\n", i + 1, questions[i]);
+    }
+
     free(message);
     return numQuestions;
 }
@@ -550,10 +539,10 @@ void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChos
     free(response);
 
     char* reply = receiveMessageTCP(*fd);
-    if (!strcmp(reply, "QUR OK")) printf("Question accepted!\n");
-    else if (!strcmp(reply, "QUR DUP")) printf("Question is a duplicate, try again.\n");
-    else if (!strcmp(reply, "QUR FUL")) printf("The question is full.\n");
-    else if (!strcmp(reply, "QUR NOK")) printf("An error has occurred, try again.\n");
+    if (!strcmp(reply, "QUR OK")) printf("question submitted with success\n");
+    else if (!strcmp(reply, "QUR DUP")) printf("question is a duplicate, try again.\n");
+    else if (!strcmp(reply, "QUR FUL")) printf("the question list is full.\n");
+    else if (!strcmp(reply, "QUR NOK")) printf("an error has occurred, try again.\n");
 
     close(*fd);
 }
