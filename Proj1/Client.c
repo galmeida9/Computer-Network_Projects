@@ -33,11 +33,11 @@ char* topicSelectNum(int numTopics, char** topics, int topicChosen);
 char* topicSelectName(int numTopics, char** topics, char* name);
 int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char* topicChosen, char** questions);
 void freeQuestions(int numQuestions, char** questions);
-void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChosen, char* question, char* text_file, char* img_file);
 void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen, char* questionChosen, char *text_file, char *img_file);
 char * questionSelectNum(int question, int num_questions, char ** questions);
 void questionGet(char * reply, char * topic, char * title);
 char * questionSelectName(char * name, int num_questions, char ** questions);
+void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChosen, char* question, char* text_file, char* img_file);
 
 char *buffer;
 int debug = 0;
@@ -175,12 +175,10 @@ char* receiveMessageTCP(int fd) {
 void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP, struct addrinfo *resTCP, socklen_t addrlen, struct sockaddr_in addr) {
     int numTopics = -1, numQuestions = -1;
     char * status, msg[21];
-    
     char *line = NULL, *command;
     char ** topics = malloc(sizeof(char*)*NUM_TOPICS), ** questions = malloc(sizeof(char*)*NUM_QUESTIONS);
     char * topicChosen = NULL, * questionChosen = NULL;
     char *answerPath, *answerImg;
-
     size_t size = 0;
 
     while(1) {
@@ -377,7 +375,6 @@ void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr
     N = atoi(strtok(NULL, " "));
 
     printf("available topics:\n");
-
     while (i <= N) {
         iter = strtok(NULL, " ");
 
@@ -439,7 +436,7 @@ char* topicSelectName(int numTopics, char** topics, char* name){
 }
 
 int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char* topicChosen, char** questions){
-    int i = 1, lenMsg = LEN_COMMAND + 1 + LEN_TOPIC + 1 + 1, numQuestions = 0;
+    int i = 0, lenMsg = LEN_COMMAND + 1 + LEN_TOPIC + 1 + 1, numQuestions = 0;
     char *iter, *message = malloc(sizeof(char) * (lenMsg));
 
     if (topicChosen == NULL) { printf("Select your topic first.\n"); return -1; }
@@ -450,20 +447,22 @@ int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sock
 
     if (!strcmp(questionList,"ERR") || !strcmp(strtok(questionList, " "), "LQR "))
         printf("ERROR\n");
-    iter = strtok(NULL, " \n");
-    if (!iter) {
+    
+    numQuestions = atoi(strtok(NULL, " \n"));
+    if (!numQuestions) {
         printf("no available questions about %s\n", topicChosen);
         return -1;
     }
 
     printf("available questions about %s:\n", topicChosen);
-    while (iter) {
-        questions[i - 1] = strdup(iter);
-        printf("%d - %s\n", i++, iter);
-        iter = strtok(NULL, " \n");
-        numQuestions++;
-    }
+    while (iter = strtok(NULL, " \n"))
+        questions[i++] = strdup(iter);
     
+    for (i = 0; i < numQuestions; i++) {
+        questions[i] = strdup(strtok(questions[i], ":"));
+        printf("%d - %s\n", i + 1, questions[i]);
+    }
+
     free(message);
     return numQuestions;
 }
