@@ -539,9 +539,9 @@ void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChos
     free(response);
 
     char* reply = receiveMessageTCP(*fd);
-    if (!strcmp(reply, "QUR OK")) printf("Question accepted!\n");
+    if (!strcmp(reply, "QUR OK")) printf("question submitted with success\n");
     else if (!strcmp(reply, "QUR DUP")) printf("Question is a duplicate, try again.\n");
-    else if (!strcmp(reply, "QUR FUL")) printf("The question is full.\n");
+    else if (!strcmp(reply, "QUR FUL")) printf("The question list is full.\n");
     else if (!strcmp(reply, "QUR NOK")) printf("An error has occurred, try again.\n");
 
     close(*fd);
