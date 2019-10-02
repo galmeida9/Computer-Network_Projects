@@ -11,7 +11,7 @@
 #include <netdb.h>
 
 #define PORT "58013"
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 2048
 #define ID_SIZE 5
 #define TOPICNAME_SIZE 10
 #define TOPIC_LIST "topics/List_of_Topics.txt"
@@ -48,6 +48,7 @@ char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOf
 char* getAnswerInformation(char *path, char *question, char *numb);
 char * listOfQuestions(char * topic);
 char* submitAnswer(char* input);
+char* questionSubmit(char *input);
 
 int main(int argc, char** argv){
     char port[6];
@@ -220,11 +221,6 @@ char* processUDPMessage(char* buffer, int len){
         return response;
     }
 
-    else if (strcmp(command, "GQU") == 0) {
-        free(bufferBackup);
-        return NULL;
-    }
-
     else if (strcmp(command, "LQU") == 0) {
         command = strtok(NULL, " ");
         if (command == NULL) {
@@ -253,27 +249,22 @@ char* processTCPMessage(char* buffer, int len){
     bufferBackup = strdup(buffer);
     command = strtok(buffer, " ");
 
-    if (strcmp(command, "GQU") == 0) {
+    if (!strcmp(command, "GQU"))
         response = questionGet(bufferBackup);
-        free(bufferBackup);
-        return response;
-    }
-    else if (strcmp(command, "QUS") == 0) {
-        response = strdup("QUR OK"); //TODO, just for testing
-        free(bufferBackup);
-        return response;
-    }
-    else if (strcmp(command, "ANS") == 0) {
+
+    else if (!strcmp(command, "QUS"))
+        response = questionSubmit(bufferBackup);
+
+    else if (!strcmp(command, "ANS"))
         response = submitAnswer(bufferBackup);
-        free(bufferBackup);
-        return response;
-    }
+
     else {
         printf("Command not found.\n");
-        free(bufferBackup);
         response = strdup("ERR\n");
-        return response;
     }
+
+    free(bufferBackup);
+    return response;
 }
 
 int checkIfStudentCanRegister(int number){
@@ -514,6 +505,80 @@ char* questionGet(char *input) {
     free(topicFolderPath);
     free(line);
     return response;
+}
+
+char * questionSubmit(char * input) {
+	int qUserId, qIMG, found, NQ = 0;
+	long qsize, offset, isize;
+	char * topic, * question, * qdata, * data, format[BUFFER_SIZE];
+	char iext[3], * idata, * line = NULL, * questionAux, * response;
+	size_t len;
+	
+	// Discard request type
+	strtok(input, " ");
+
+	qUserId = atoi(strtok(NULL, " "));
+	topic = strtok(NULL, " ");
+	question = strtok(NULL, " ");
+	qsize = atol(strtok(NULL, " "));
+	data = strtok(NULL, "\n");
+
+	sprintf(format, "%%%ldc %%d", qsize);
+	qdata = malloc(sizeof(char) * qsize);
+	sscanf(data, format, qdata, &qIMG);
+
+	if (qIMG) {
+		offset = qsize + 3;
+		sscanf(data + offset, "%s %ld", iext, &isize);
+        idata = malloc(sizeof(char) * isize);
+
+        // TODO proper image transmission
+        sscanf(data + offset, "%*s %*d %s", idata);
+	}
+	free(qdata);
+
+	// Check if topic exists
+    found = isTopicInList(topic);
+    if (!found) { return strdup("QUR NOK\n"); }
+
+    // Check if question already exists
+    int lenQuestionPath = strlen(TOPIC_FOLDER) + strlen(topic) + strlen(QUESTIONS_LIST)+1;
+    char * questionPath = malloc(sizeof(char) * (lenQuestionPath));
+    snprintf(questionPath, lenQuestionPath, "%s%s%s", TOPIC_FOLDER, topic, QUESTIONS_LIST);
+
+	FILE * fd = fopen(questionPath, "a+");
+    if (!fd) {
+        free(questionPath);
+        return strdup("QUR NOK\n");
+    }
+    
+    found = 0;
+    rewind(fd);
+    while (getline(&line, &len, fd) != -1) {
+        
+        // Text file format:  question:qUserID:NA
+        questionAux = strtok(line, ":");
+        if (!strcmp(question, questionAux)) { found = 1; break; }
+        NQ++;
+    }
+    free(line);
+    free(questionPath);
+
+    if (NQ >= 99)
+    	response = strdup("QUR FUL\n");
+    else if (!found && qIMG) {
+    	fprintf(fd, "%s:%d:00:1:%s:\n", question, qUserId, iext);
+    	response = strdup("QUR OK\n");
+    }
+    else if (!found) {
+    	fprintf(fd, "%s:%d:00:0:\n", question, qUserId);
+    	response = strdup("QUR OK\n");
+    }
+    else
+    	response = strdup("QUR DUP\n");
+
+    fclose(fd);
+	return response;
 }
 
 char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOfAnswers, int qIMG, char *qiext) {
