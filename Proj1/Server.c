@@ -221,16 +221,20 @@ char* processUDPMessage(char* buffer, int len){
     }
 
     else if (strcmp(command, "GQU") == 0) {
-
+        free(bufferBackup);
+        return NULL;
     }
 
     else if (strcmp(command, "LQU") == 0) {
         command = strtok(NULL, " ");
-        if (command == NULL) return strdup("ERR\n");
+        if (command == NULL) {
+            free(bufferBackup);
+            return strdup("ERR\n");
+        }
 
         printf("%s\n", command);
         response = listOfQuestions(command);
-        printf("Sent list of questions.\n");
+        free(bufferBackup);
         return response;
     }
 
@@ -502,6 +506,7 @@ char* questionGet(char *input) {
     if (!foundQuestion) {
         response = strdup("QGR EOF\n");
         free(topicFolderPath);
+        free(line);
         return response;
     }
 
@@ -674,7 +679,7 @@ char* getAnswerInformation(char *path, char *question, char *numb) {
 char * listOfQuestions(char * topic) {
     int N = 0;
     char path[33] = TOPIC_FOLDER;
-    char * response, * line, * question, * userID, * NA;
+    char * response, * line = NULL, * question, * userID, * NA;
     size_t len = 0;
 
     strcat(path, topic);
@@ -683,7 +688,8 @@ char * listOfQuestions(char * topic) {
     
     FILE *fp = fopen (path, "r");
     if (!fp) {
-        fprintf (stderr, "error: file open failed '%s'.\n", path);
+        printf ("There are no questions available.\n");
+        strcpy(response, "LQR 0\n");
         return response;
     }
 
@@ -698,6 +704,8 @@ char * listOfQuestions(char * topic) {
 
     strcat(response,"\n");
     fclose(fp);
+    free(line);
+    printf("Sent list of questions.\n");
     return response;
 }
 
