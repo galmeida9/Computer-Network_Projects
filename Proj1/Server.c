@@ -11,7 +11,7 @@
 #include <netdb.h>
 
 #define PORT "58013"
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 2048
 #define ID_SIZE 5
 #define TOPICNAME_SIZE 10
 #define TOPIC_LIST "topics/List_of_Topics.txt"
@@ -21,6 +21,7 @@
 #define MAX_TOPICS 99
 #define MAX_ANSWERS 99
 #define AN_SIZE 3
+#define DISPLAY_ANSWERS 10
 
 int nUDP, nTCP, fdUDP, fdTCP, newfd;
 socklen_t addrlenUDP, addrlenTCP;
@@ -47,6 +48,7 @@ char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOf
 char* getAnswerInformation(char *path, char *question, char *numb);
 char * listOfQuestions(char * topic);
 char* submitAnswer(char* input);
+char* questionSubmit(char *input);
 
 int main(int argc, char** argv){
     char port[6];
@@ -97,6 +99,7 @@ int main(int argc, char** argv){
     if (nUDP == -1) /*error*/ exit(1);
 
     printf("Created UDP Server\n");
+
     /*TCP Server*/
     memset(&hintsTCP, 0, sizeof(hintsTCP));
     hintsTCP.ai_family = AF_INET;
@@ -218,17 +221,16 @@ char* processUDPMessage(char* buffer, int len){
         return response;
     }
 
-    else if (strcmp(command, "GQU") == 0) {
-
-    }
-
     else if (strcmp(command, "LQU") == 0) {
         command = strtok(NULL, " ");
-        if (command == NULL) return strdup("ERR\n");
+        if (command == NULL) {
+            free(bufferBackup);
+            return strdup("ERR\n");
+        }
 
         printf("%s\n", command);
         response = listOfQuestions(command);
-        printf("Sent list of questions.\n");
+        free(bufferBackup);
         return response;
     }
 
@@ -247,29 +249,22 @@ char* processTCPMessage(char* buffer, int len){
     bufferBackup = strdup(buffer);
     command = strtok(buffer, " ");
 
-    if (strcmp(command, "GQU") == 0) {
+    if (!strcmp(command, "GQU"))
         response = questionGet(bufferBackup);
-        free(bufferBackup);
-        return response;
-    }
 
-    else if (strcmp(command, "QUS") == 0) {
-        response = strdup("QUR OK"); //TODO, just for testing
-        free(bufferBackup);
-        return response;
-    }
+    else if (!strcmp(command, "QUS"))
+        response = questionSubmit(bufferBackup);
 
-    else if (strcmp(command, "ANS") == 0) {
+    else if (!strcmp(command, "ANS"))
         response = submitAnswer(bufferBackup);
-        free(bufferBackup);
-        return response;
-    }
 
     else {
         printf("Command not found.\n");
-        free(bufferBackup);
         response = strdup("ERR\n");
     }
+
+    free(bufferBackup);
+    return response;
 }
 
 int checkIfStudentCanRegister(int number){
@@ -502,6 +497,7 @@ char* questionGet(char *input) {
     if (!foundQuestion) {
         response = strdup("QGR EOF\n");
         free(topicFolderPath);
+        free(line);
         return response;
     }
 
@@ -509,6 +505,80 @@ char* questionGet(char *input) {
     free(topicFolderPath);
     free(line);
     return response;
+}
+
+char * questionSubmit(char * input) {
+	int qUserId, qIMG, found, NQ = 0;
+	long qsize, offset, isize;
+	char * topic, * question, * qdata, * data, format[BUFFER_SIZE];
+	char iext[3], * idata, * line = NULL, * questionAux, * response;
+	size_t len;
+	
+	// Discard request type
+	strtok(input, " ");
+
+	qUserId = atoi(strtok(NULL, " "));
+	topic = strtok(NULL, " ");
+	question = strtok(NULL, " ");
+	qsize = atol(strtok(NULL, " "));
+	data = strtok(NULL, "\n");
+
+	sprintf(format, "%%%ldc %%d", qsize);
+	qdata = malloc(sizeof(char) * qsize);
+	sscanf(data, format, qdata, &qIMG);
+
+	if (qIMG) {
+		offset = qsize + 3;
+		sscanf(data + offset, "%s %ld", iext, &isize);
+        idata = malloc(sizeof(char) * isize);
+
+        // TODO proper image transmission
+        sscanf(data + offset, "%*s %*d %s", idata);
+	}
+	free(qdata);
+
+	// Check if topic exists
+    found = isTopicInList(topic);
+    if (!found) { return strdup("QUR NOK\n"); }
+
+    // Check if question already exists
+    int lenQuestionPath = strlen(TOPIC_FOLDER) + strlen(topic) + strlen(QUESTIONS_LIST)+1;
+    char * questionPath = malloc(sizeof(char) * (lenQuestionPath));
+    snprintf(questionPath, lenQuestionPath, "%s%s%s", TOPIC_FOLDER, topic, QUESTIONS_LIST);
+
+	FILE * fd = fopen(questionPath, "a+");
+    if (!fd) {
+        free(questionPath);
+        return strdup("QUR NOK\n");
+    }
+    
+    found = 0;
+    rewind(fd);
+    while (getline(&line, &len, fd) != -1) {
+        
+        // Text file format:  question:qUserID:NA
+        questionAux = strtok(line, ":");
+        if (!strcmp(question, questionAux)) { found = 1; break; }
+        NQ++;
+    }
+    free(line);
+    free(questionPath);
+
+    if (NQ >= 99)
+    	response = strdup("QUR FUL\n");
+    else if (!found && qIMG) {
+    	fprintf(fd, "%s:%d:00:1:%s:\n", question, qUserId, iext);
+    	response = strdup("QUR OK\n");
+    }
+    else if (!found) {
+    	fprintf(fd, "%s:%d:00:0:\n", question, qUserId);
+    	response = strdup("QUR OK\n");
+    }
+    else
+    	response = strdup("QUR DUP\n");
+
+    fclose(fd);
+	return response;
 }
 
 char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOfAnswers, int qIMG, char *qiext) {
@@ -557,10 +627,11 @@ char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOf
     /*Get the answers information*/
     char *answers = malloc(sizeof(char) * BUFFER_SIZE);
     strcpy(answers, "");
-    for (int i = 1; i <= numberOfAnswers; i++) {
+    for (int i = 1; (i <= numberOfAnswers) && (i <= DISPLAY_ANSWERS); i++) {
+        strcat(answers, " ");
         char *questionNumber = malloc(sizeof(char) * AN_SIZE);
         i < 10 ? snprintf(questionNumber, AN_SIZE, "0%d", i) : snprintf(question, AN_SIZE, "%d", i);
-        char *answerInfo = getAnswerInformation(path, question, questionNumber);
+        char * answerInfo = getAnswerInformation(path, question, questionNumber);
         strcat(answers, answerInfo);
         free(questionNumber);
         free(answerInfo);
@@ -568,12 +639,12 @@ char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOf
 
     char *response = malloc(sizeof(char) * BUFFER_SIZE);
     if (qIMG) {
-        snprintf(response, BUFFER_SIZE, "QGR %d %ld %s 1 %s %ld %s %d %s\n", qUserId, qsize, qdata, qiext, qisize, qidata, numberOfAnswers, answers);
+        snprintf(response, BUFFER_SIZE, "QGR %d %ld %s 1 %s %ld %s %d%s\n", qUserId, qsize, qdata, qiext, qisize, qidata, numberOfAnswers, answers);
         free(qidata);
     }
 
     else {
-        snprintf(response, BUFFER_SIZE, "QGR %d %ld %s 0 %d %s\n", qUserId, qsize, qdata, numberOfAnswers, answers);
+        snprintf(response, BUFFER_SIZE, "QGR %d %ld %s 0 %d%s\n", qUserId, qsize, qdata, numberOfAnswers, answers);
     }
 
     free(answers);
@@ -610,7 +681,7 @@ char* getAnswerInformation(char *path, char *question, char *numb) {
     fclose(answerDescFd);
     free(answerDesc);
 
-    //Get answer data
+    /*Get the answer in the file and its size*/
     char *answerPath = malloc(sizeof(char) * BUFFER_SIZE);
     snprintf(answerPath, BUFFER_SIZE, "%s/%s_%s.txt", path, question, numb);
     
@@ -625,8 +696,11 @@ char* getAnswerInformation(char *path, char *question, char *numb) {
     fseek(answerFd, 0L, SEEK_END);
     asize = ftell(answerFd);
     fseek(answerFd, 0L, SEEK_SET);
-    adata = (char*) malloc(sizeof(char) * (asize + 1));
-    strcpy(adata, "");
+
+    //adata = (char*) malloc(sizeof(char) * (asize + 1));
+    adata = (char*) calloc(asize + 1, sizeof(char));
+    
+    //strcpy(adata, ""); ????
     fread(adata,asize,sizeof(unsigned char),answerFd);
 
     fclose(answerFd);
@@ -656,42 +730,47 @@ char* getAnswerInformation(char *path, char *question, char *numb) {
         fclose(imageFd);
         free(imgPath);
 
-        snprintf(respose, BUFFER_SIZE, "%d %ld %s %d %s %s %ld %s", aUserID, asize, adata, aIMG, aiext, numb, aisize, aidata);
+        snprintf(respose, BUFFER_SIZE, "%s %d %ld %s %d %s %ld %s", numb, aUserID, asize, adata, aIMG, aiext, aisize, aidata);
         free(aidata);
     }
 
-    else snprintf(respose, BUFFER_SIZE, "%d %ld %s 0", aUserID, asize, adata);
+    else snprintf(respose, BUFFER_SIZE, "%s %d %ld %s 0", numb, aUserID, asize, adata);
 
     free(adata);
     free(line);
     return respose;
 }
 
-char* listOfQuestions(char *topic) {
-    int i = 1;
-    char path[33] = TOPIC_FOLDER, question[16]; // TODO review size
-    char * response, * line;
+char * listOfQuestions(char * topic) {
+    int N = 0;
+    char path[33] = TOPIC_FOLDER;
+    char * response, * line = NULL, * question, * userID, * NA;
     size_t len = 0;
 
     strcat(path, topic);
     strcat(path, QUESTIONS_LIST);
-    response = malloc (sizeof(char) * BUFFER_SIZE);
-    response = strdup("LQR");
+    response = malloc(sizeof(char) * BUFFER_SIZE);
     
     FILE *fp = fopen (path, "r");
     if (!fp) {
-        fprintf (stderr, "error: file open failed '%s'.\n", path);
+        printf ("There are no questions available.\n");
+        strcpy(response, "LQR 0\n");
         return response;
     }
 
+    while (getline(&line, &len, fp) != -1) N++;
+    sprintf(response, "LQR %d", N);
+    rewind(fp);
+
     while (getline(&line, &len, fp) != -1) {
-        char * token = strtok(line, ":");
-        snprintf(question, 16," %s", token);
-        strcat(response, question);
+        question = strtok(line, ":"); userID = strtok(NULL, ":"); NA = strtok(NULL, ":");
+        sprintf(response,"%s %s:%s:%s", response, question, userID, NA);
     }
 
-    strcat(response, "\n");
+    strcat(response,"\n");
     fclose(fp);
+    free(line);
+    printf("Sent list of questions.\n");
     return response;
 }
 
