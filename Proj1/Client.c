@@ -493,7 +493,7 @@ void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChos
     char *response = malloc(sizeof(char) * BUFFER_SIZE);
     if (img_file != NULL) {
         FILE *imageFd;
-        imageFd = fopen(img_file, "r");
+        imageFd = fopen(img_file, "rb");
         if (imageFd == NULL) {
             printf("Can't find image file.\n");
             free(textPath);
@@ -507,25 +507,35 @@ void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChos
         aisize = ftell(imageFd);
         fseek(imageFd, 0L, SEEK_SET);
 
-        aidata = (char*) malloc(sizeof(char) * (aisize + 1));
-        strcpy(aidata, "");
-        fread(aidata,aisize,sizeof(unsigned char),imageFd);
-
-        fclose(imageFd);
-
         char *aiext = strtok(img_file, ".");
         aiext = strtok(NULL, ".");
 
-        snprintf(response, BUFFER_SIZE, "QUS %d %s %s %ld %s 1 %s %ld %s\n", aUserID, topicChosen, question, asize, adata, aiext, aisize, aidata);
+        snprintf(response, BUFFER_SIZE, "QUS %d %s %s %ld %s 1 %s %ld ", aUserID, topicChosen, question, asize, adata, aiext, aisize);
+        SendMessageTCP(response, fd, res);
+
+        aidata = (char*) malloc(sizeof(char) * BUFFER_SIZE);
+        int sizeAux = aisize;
+        
+        while (sizeAux > 0){
+            int nRead = fread(aidata, 1 , BUFFER_SIZE,imageFd);
+            write(*fd, aidata, nRead);
+            sizeAux = sizeAux - BUFFER_SIZE;
+        }
+        
+        write(*fd, "\n", strlen("\n"));
+
+        fclose(imageFd);        
         free(aidata);
     }
 
-    else snprintf(response, BUFFER_SIZE, "QUS %d %s %s %ld %s 0\n", aUserID, topicChosen, question, asize, adata);
+    else {
+        snprintf(response, BUFFER_SIZE, "QUS %d %s %s %ld %s 0\n", aUserID, topicChosen, question, asize, adata);
+        SendMessageTCP(response, fd, res);
+    }
 
     free(adata);
     free(textPath);
     
-    SendMessageTCP(response, fd, res);
     free(response);
 
     char* reply = receiveMessageTCP(*fd);
@@ -593,6 +603,8 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
             write(fd, idata, nRead);
             sizeAux = sizeAux - BUFFER_SIZE;
         }
+
+        write(fd, "\n", strlen("\n"));
     
         fclose(imgFd);
         free(idata);

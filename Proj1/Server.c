@@ -896,18 +896,17 @@ char* submitAnswer(char* input, int sizeInput, int fd){
         return strdup("ANR FUL\n");
     }
 
-    /*Start writing*/
-
-    //Write and receive all the data needed
+    //Prepare file pathname
     numOfAnswers++;
     int lenAnswerPath = strlen(TOPIC_FOLDER) + strlen(topic) + 1 + strlen(question) + 1 + 2 + 4 + 1; //Example: question_56.txt\0
     char *answerPath = (char*) malloc(sizeof(char)*lenAnswerPath);
     snprintf(answerPath, lenAnswerPath, "%s%s/%s_%02d.txt", TOPIC_FOLDER, topic, question, numOfAnswers);
 
+    //Receive and write text file
     if (recvTCPWriteFile(fd, answerPath, &input, BUFFER_SIZE, &offset, asizeInt) == -1) printf("erro\n");
-
     free(answerPath);
 
+    //Prepare for image
     aIMG = strtok(input+offset, " "); 
     int aIMGInt = 0;
 
@@ -936,7 +935,7 @@ char* submitAnswer(char* input, int sizeInput, int fd){
     fclose(answerDescFP);
     free(answerDescPath);
     
-    //Write image
+    //Check if there is an image
     if (aIMGInt == 1){
 
         if (iext == NULL || isize == NULL){
@@ -947,11 +946,13 @@ char* submitAnswer(char* input, int sizeInput, int fd){
             return strdup("ANR NOK\n");
         }
 
+        //Prepare image pathname
         int isizeInt = atoi(isize);
         int lenAnswerImgPath = strlen(TOPIC_FOLDER) + strlen(topic) + 1 + strlen(question) + 1 + 2 + 1 + strlen(iext) + 1; //Example: question_56.jpg\0
         char *answerImgPath = (char*) malloc(sizeof(char)*lenAnswerImgPath);
         snprintf(answerImgPath, lenAnswerImgPath, "%s%s/%s_%02d.%s", TOPIC_FOLDER, topic, question, numOfAnswers, iext);
 
+        //Receive and write image
         offset = offset + strlen(aIMG) + 1 + strlen(iext) + 1 + strlen(isize) + 1;
         if (recvTCPWriteFile(fd, answerImgPath, &input, BUFFER_SIZE, &offset, isizeInt) == -1) printf("erro\n");
 
