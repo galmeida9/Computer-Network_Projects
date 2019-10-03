@@ -301,16 +301,6 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             else submitQuestion(&tcp_fd, &resTCP, *userId, topicChosen, questionChosen, text_file, img_file);
         }
 
-        else if ((strcmp(command, "question_submit") == 0 || strcmp(command, "qs") == 0) && *userId != -1){
-            char *question = NULL, *text_file = NULL, *img_file = NULL;
-            command = strtok(NULL, "\n");
-            questionChosen = strtok(command, " ");
-            text_file = strtok(NULL, " ");
-            img_file = strtok(NULL, "\n");
-            if (questionChosen == NULL || text_file == NULL) printf("Invalid arguments.\n");
-            else submitQuestion(&tcp_fd, &resTCP, *userId, topicChosen, questionChosen, text_file, img_file);
-        }
-
         else if (((strcmp(command, "as") == 0) || (strcmp(command, "answer_submit") == 0)) && *userId != -1) { //TODO
             answerPath = strtok(NULL, " ");
             answerImg = strtok(NULL, " ");
@@ -503,7 +493,7 @@ void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChos
     char *response = malloc(sizeof(char) * BUFFER_SIZE);
     if (img_file != NULL) {
         FILE *imageFd;
-        imageFd = fopen(img_file, "r");
+        imageFd = fopen(img_file, "rb");
         if (imageFd == NULL) {
             printf("Can't find image file.\n");
             free(textPath);
@@ -517,25 +507,35 @@ void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChos
         aisize = ftell(imageFd);
         fseek(imageFd, 0L, SEEK_SET);
 
-        aidata = (char*) malloc(sizeof(char) * (aisize + 1));
-        strcpy(aidata, "");
-        fread(aidata,aisize,sizeof(unsigned char),imageFd);
-
-        fclose(imageFd);
-
         char *aiext = strtok(img_file, ".");
         aiext = strtok(NULL, ".");
 
-        snprintf(response, BUFFER_SIZE, "QUS %d %s %s %ld %s 1 %s %ld %s\n", aUserID, topicChosen, question, asize, adata, aiext, aisize, aidata);
+        snprintf(response, BUFFER_SIZE, "QUS %d %s %s %ld %s 1 %s %ld ", aUserID, topicChosen, question, asize, adata, aiext, aisize);
+        SendMessageTCP(response, fd, res);
+
+        aidata = (char*) malloc(sizeof(char) * BUFFER_SIZE);
+        int sizeAux = aisize;
+        
+        while (sizeAux > 0){
+            int nRead = fread(aidata, 1 , BUFFER_SIZE,imageFd);
+            write(*fd, aidata, nRead);
+            sizeAux = sizeAux - BUFFER_SIZE;
+        }
+        
+        write(*fd, "\n", strlen("\n"));
+
+        fclose(imageFd);        
         free(aidata);
     }
 
-    else snprintf(response, BUFFER_SIZE, "QUS %d %s %s %ld %s 0\n", aUserID, topicChosen, question, asize, adata);
+    else {
+        snprintf(response, BUFFER_SIZE, "QUS %d %s %s %ld %s 0\n", aUserID, topicChosen, question, asize, adata);
+        SendMessageTCP(response, fd, res);
+    }
 
     free(adata);
     free(textPath);
     
-    SendMessageTCP(response, fd, res);
     free(response);
 
     char* reply = receiveMessageTCP(*fd);
@@ -554,7 +554,7 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
     answerFd = fopen(text_file, "r");
     if (answerFd == NULL) {
         printf("Can't find answer file.\n");
-        exit(1);
+        return;
     }
 
     fseek(answerFd, 0L, SEEK_END);
@@ -571,40 +571,61 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
         aIMG = 1;
         len = 0;
         FILE *imgFd;
-        imgFd = fopen(strtok(img_file, "\n"), "r");
+        imgFd = fopen(strtok(img_file, "\n"), "rb");
+
         if (imgFd == NULL) {
             printf("Can't find image file.\n");
-            exit(1);
+            free(adata);
+            return;
         }
-
-        fseek(imgFd, 0L, SEEK_END);
-        isize = ftell(imgFd);
-        fseek(imgFd, 0L, SEEK_SET);
-        char *idata = malloc(sizeof(char) * (isize + 1));
-        fread(idata,isize,sizeof(unsigned char),imgFd);
-        fclose(imgFd);
 
         strtok(img_file, ".");
         char *iext = strtok(NULL, ".");
         if (strlen(iext) > 3) {
             printf("img extention has more than 3 bytes.\n");
+            free(adata);
             return;
         }
 
-        message = malloc(sizeof(char) * (BUFFER_SIZE + asize + isize));
-        snprintf(message, BUFFER_SIZE + asize + isize, "ANS %d %s %s %ld %s %d %s %ld %s\n", aUserID, topicChosen, questionChosen, asize, adata, aIMG, iext, isize, idata);
+        fseek(imgFd, 0L, SEEK_END);
+        isize = ftell(imgFd);
+
+        message = malloc(sizeof(char) * (BUFFER_SIZE + asize));
+        snprintf(message, BUFFER_SIZE + asize + isize, "ANS %d %s %s %ld %s %d %s %ld ", aUserID, topicChosen, questionChosen, asize, adata, aIMG, iext, isize);
+        SendMessageTCP(message, &fd, res);
+
+        int sizeAux = isize;
+        fseek(imgFd, 0L, SEEK_SET);
+        char *idata = malloc(sizeof(char) * (BUFFER_SIZE));
+
+        while (sizeAux > 0){
+            int nRead = fread(idata, 1 , BUFFER_SIZE,imgFd);
+            write(fd, idata, nRead);
+            sizeAux = sizeAux - BUFFER_SIZE;
+        }
+
+        write(fd, "\n", strlen("\n"));
+    
+        fclose(imgFd);
+        free(idata);
+
     }
 
     else {
         message = malloc(sizeof(char) * (BUFFER_SIZE + asize));
         snprintf(message, BUFFER_SIZE + asize + isize, "ANS %d %s %s %ld %s %d\n", aUserID, topicChosen, questionChosen, asize, adata, aIMG);
+        SendMessageTCP(message, &fd, res);
     }
 
-    printf("enviou: %s", message);
+    //Parse reply
+    char *reply = receiveMessageTCP(fd);
+    if (!strcmp(reply, "ANR OK")) printf("answer submitted!\n");
+    else if (!strcmp(reply, "ANR NOK")) printf("error submiting.\n");
+    else if (!strcmp(reply, "ANR FUL")) printf("can't submit more answers.\n");
 
-    SendMessageTCP(message, &fd, res);
-    receiveMessageTCP(fd);
     close(fd);
+    free(message);
+    free(adata);
 }
 
 char * questionSelectNum(int question, int num_questions, char ** questions) {

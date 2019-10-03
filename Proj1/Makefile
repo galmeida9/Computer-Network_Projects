@@ -3,7 +3,7 @@ CFLAGS =-g -ansi -Wall
 LDFLAGS = -lm
 
 all:
-	$(CC) Client.c -o user $(LDFLAGS)
+	$(CC) Client.c -g -o user $(LDFLAGS)
 	$(CC) Server.c -g -o FS $(LDFLAGS)
 
 clean:
