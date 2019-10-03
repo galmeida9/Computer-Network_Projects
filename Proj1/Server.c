@@ -221,6 +221,11 @@ char* processUDPMessage(char* buffer, int len){
         return response;
     }
 
+    else if (strcmp(command, "GQU") == 0) {
+        free(bufferBackup);
+        return NULL;
+    }
+
     else if (strcmp(command, "LQU") == 0) {
         command = strtok(NULL, " ");
         if (command == NULL) {
@@ -251,16 +256,23 @@ char* processTCPMessage(char* buffer, int len){
 
     if (!strcmp(command, "GQU"))
         response = questionGet(bufferBackup);
-
-    else if (!strcmp(command, "QUS"))
-        response = questionSubmit(bufferBackup);
-
-    else if (!strcmp(command, "ANS"))
+        free(bufferBackup);
+        return response;
+    }
+    else if (strcmp(command, "QUS") == 0) {
+        response = strdup("QUR OK"); //TODO, just for testing
+        free(bufferBackup);
+        return response;
+    }
+    else if (strcmp(command, "ANS") == 0) {
         response = submitAnswer(bufferBackup);
-
+        free(bufferBackup);
+        return response;
+    }
     else {
         printf("Command not found.\n");
         response = strdup("ERR\n");
+        return response;
     }
 
     free(bufferBackup);
