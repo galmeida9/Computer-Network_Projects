@@ -185,7 +185,7 @@ int recvTCPWriteFile(int fd, char* filePath, char** bufferAux, int bufferSize, i
         *offset = *offset + toWrite + 1;
         toWrite = 0;
     }
-    else {
+    else if (*offset < (bufferSize)){
         fwrite(*bufferAux+*offset, sizeof(char), bufferSize-*offset, fp);
         toWrite = toWrite - (bufferSize-*offset);
     }
@@ -198,6 +198,10 @@ int recvTCPWriteFile(int fd, char* filePath, char** bufferAux, int bufferSize, i
         toWrite = toWrite - sizeAux;
         if (toWrite <= 0) {
             *offset = *offset + sizeAux + 1;
+            if (*offset >= bufferSize) {
+                read(fd, buffer, bufferSize);
+                *offset = *offset - bufferSize;
+            }
             break;
         }
         memset(buffer, 0, sizeof(buffer));
