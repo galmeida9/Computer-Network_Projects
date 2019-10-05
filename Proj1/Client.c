@@ -25,6 +25,7 @@ void SendMessageUDP(char *message, int fd, struct addrinfo *res);
 char* receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr);
 void SendMessageTCP(char *message, int *fd, struct addrinfo **res);
 char* receiveMessageTCP(int fd);
+int recvTCPWriteFile(int fd, char* filePath, char** bufferAux, int bufferSize, int* offset, int size);
 void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP, struct addrinfo *resTCP, socklen_t addrlen, struct sockaddr_in addr);
 void registerNewUser(int id, int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr);
 void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char** topics, int* numTopics);
@@ -168,8 +169,46 @@ char* receiveMessageTCP(int fd) {
     }
     
     if (debug == 1) printf("Received: |%s|\n", buffer);
-
     return buffer;
+}
+
+int recvTCPWriteFile(int fd, char* filePath, char** bufferAux, int bufferSize, int* offset, int size){
+    char *buffer = (char*) malloc(sizeof(char)*bufferSize);
+    //Open file
+    FILE* fp = fopen(filePath, "wb");
+    if (fp == NULL) return -1;
+
+    int toWrite = size;
+
+    if (toWrite <= (bufferSize - *offset)) {
+        fwrite(*bufferAux+*offset, sizeof(char), toWrite, fp);
+        *offset = *offset + toWrite + 1;
+        toWrite = 0;
+    }
+    else {
+        fwrite(*bufferAux+*offset, sizeof(char), bufferSize-*offset, fp);
+        toWrite = toWrite - (bufferSize-*offset);
+    }
+
+    //Receive message if needed
+    ssize_t nMsg = 0;
+    while (toWrite > 0 && (nMsg = read(fd, buffer, bufferSize))>0){
+        int sizeAux = toWrite > nMsg? nMsg : toWrite;
+        fwrite(buffer, 1, sizeAux, fp);
+        toWrite = toWrite - sizeAux;
+        if (toWrite <= 0) {
+            *offset = *offset + sizeAux + 1;
+            break;
+        }
+        memset(buffer, 0, sizeof(buffer));
+        *offset = 0;
+    }
+    
+    //Close file and return
+    fclose(fp);
+    memcpy(*bufferAux, buffer, nMsg);
+    free(buffer);
+    return 0;
 }
 
 void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP, struct addrinfo *resTCP, socklen_t addrlen, struct sockaddr_in addr) {
