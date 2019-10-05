@@ -222,11 +222,6 @@ char* processUDPMessage(char* buffer, int len){
         return response;
     }
 
-    else if (strcmp(command, "GQU") == 0) {
-        free(bufferBackup);
-        return NULL;
-    }
-
     else if (strcmp(command, "LQU") == 0) {
         command = strtok(NULL, " ");
         if (command == NULL) {
@@ -254,7 +249,8 @@ char* processTCPMessage(char* buffer, int len, int fd){
 
     //bufferBackup = strdup(buffer);
     memcpy(bufferBackup, buffer, len);
-
+    bufferBackup[len] = '\0';
+    
     command = strtok(buffer, " ");
 
     if (!strcmp(command, "GQU"))
@@ -478,11 +474,9 @@ void freeTopicInList() {
 
 char* questionGet(char *input, int fd) {
     strtok(input, " ");
-
     char *response;
     char *topic = strtok(NULL, " ");
-    char *question = strtok(NULL, " ");
-    char *leftover = strtok(NULL, " ");
+    char *question = strtok(NULL, "\n");
 
     if (topic == NULL) {
         response = strdup("QGR ERR\n");
@@ -494,11 +488,6 @@ char* questionGet(char *input, int fd) {
     }
 
     if (question == NULL) {
-        response = strdup("QGR ERR\n");
-        return response;
-    }
-
-    if (leftover != NULL) {
         response = strdup("QGR ERR\n");
         return response;
     }
@@ -526,6 +515,7 @@ char* questionGet(char *input, int fd) {
 
     while ((nread = getline(&line, &len, questionsFd)) != -1) {
         char *token = strtok(line, ":");
+
         if (strcmp(token, question) == 0) {
             foundQuestion = 1;
             qUserId = atoi(strtok(NULL, ":"));
