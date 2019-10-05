@@ -394,9 +394,10 @@ void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr
 
         sep = strstr(iter, ":");
         offset = sep - iter;
-        name = malloc(sizeof(char) * offset);
+        name = malloc(sizeof(char) * (offset + 1));
 
-        strncpy(name, iter, offset);
+        memcpy(name, iter, offset);
+        name[offset] = '\0';
         user = atoi(iter + offset + 1);
 
         topics[i-1] = strdup(iter);
@@ -478,7 +479,7 @@ int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sock
         questions[i++] = strdup(iter);
     
     for (i = 0; i < numQuestions; i++) {
-        questions[i] = strdup(strtok(questions[i], ":"));
+        questions[i] = strtok(questions[i], ":");
         printf("%d - %s\n", i + 1, questions[i]);
     }
 
@@ -705,6 +706,11 @@ void questionGet(char * reply, char * topic, char * title) {
     int N, AN, asize, aIMG, aisize;
     char request[3], format[BUFFER_SIZE], * qdata, qiext[3], * qidata;
     char * adata, aiext[3], * aidata;
+
+    if (!strcmp(reply, "QGR EOF") || !strcmp(reply, "QGR ERR")) {
+        printf("an error occurred while processing your request\n");
+        return;
+    }
 
     sscanf(reply, "%s %*d %d", request, &qsize);
     qdata = malloc(sizeof(char) * qsize);
