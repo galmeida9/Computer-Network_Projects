@@ -284,7 +284,7 @@ int recvTCPWriteFile(int fd, char* filePath, char** bufferAux, int bufferSize, i
         *offset = *offset + toWrite + 1;
         toWrite = 0;
     }
-    else {
+    else if (*offset < (bufferSize)){
         fwrite(*bufferAux+*offset, sizeof(char), bufferSize-*offset, fp);
         toWrite = toWrite - (bufferSize-*offset);
     }
@@ -297,6 +297,10 @@ int recvTCPWriteFile(int fd, char* filePath, char** bufferAux, int bufferSize, i
         toWrite = toWrite - sizeAux;
         if (toWrite <= 0) {
             *offset = *offset + sizeAux + 1;
+            if (*offset >= bufferSize) {
+                read(fd, buffer, bufferSize);
+                *offset = *offset - bufferSize;
+            }
             break;
         }
         memset(buffer, 0, sizeof(buffer));
@@ -912,6 +916,12 @@ char* submitAnswer(char* input, int sizeInput, int fd){
     //Receive and write text file
     if (recvTCPWriteFile(fd, answerPath, &input, BUFFER_SIZE, &offset, asizeInt) == -1) printf("erro\n");
     free(answerPath);
+
+    //Check if input has argument of aIMG
+    if ((BUFFER_SIZE - offset) < (2)){
+        read(fd, input, BUFFER_SIZE);
+        offset = BUFFER_SIZE - offset;
+    }
 
     //Prepare for image
     aIMG = strtok(input+offset, " "); 
