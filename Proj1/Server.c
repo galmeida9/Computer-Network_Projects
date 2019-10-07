@@ -773,9 +773,10 @@ char* getAnswerInformation(char *path, char *question, char *numb, int fd) {
         int sizeAux = aisize;
         char *aidata = malloc(sizeof(char) * (BUFFER_SIZE));
 
+        int nWrote = 0;
         while (sizeAux > 0){
             int nRead = fread(aidata, 1 , BUFFER_SIZE, imageFd);
-            write(fd, aidata, nRead);
+            nWrote = nWrote + write(fd, aidata, nRead);
             sizeAux = sizeAux - BUFFER_SIZE;
         }
 
@@ -829,7 +830,7 @@ char* listOfQuestions(char * topic) {
 }
 
 char* submitAnswer(char* input, int sizeInput, int fd){
-    char *userID, *topic, *question, *asize, *adata, *inputAux, *aIMG, *iext = NULL, *isize = NULL, *idata = NULL;
+    char *userID, *topic, *question, *asize, *inputAux, *aIMG, *iext = NULL, *isize = NULL, *idata = NULL;
     //printf("/%s/%d\n", input, sizeInput);
 
     if (strcmp(strtok(input, " "), "ANS")) return strdup("ERR\n"); //Check if command is ANS
@@ -845,7 +846,6 @@ char* submitAnswer(char* input, int sizeInput, int fd){
     //Check if topic exists
     int found = isTopicInList(topic);
     if (!found) {
-        free(adata);
         free(userID); free(topic); free(question);
         return strdup("ANR NOK\n");
     }
@@ -857,7 +857,6 @@ char* submitAnswer(char* input, int sizeInput, int fd){
 
     FILE *questionListFP = fopen(questionPath, "r+");
     if (questionListFP == NULL){
-        free(adata);
         free(questionPath);
         free(userID); free(topic); free(question);
         return strdup("ANR NOK\n");
@@ -890,7 +889,6 @@ char* submitAnswer(char* input, int sizeInput, int fd){
     //Question not found
     if ( numOfAnswers == -1){ 
         fclose(questionListFP);
-        free(adata);
         free(questionPath);
         free(line);
         free(userID); free(topic); free(question);
@@ -900,7 +898,6 @@ char* submitAnswer(char* input, int sizeInput, int fd){
     //Check if answer list is full
     if (numOfAnswers == MAX_ANSWERS){
         fclose(questionListFP);
-        free(adata);
         free(questionPath);
         free(line);
         free(userID); free(topic); free(question);
