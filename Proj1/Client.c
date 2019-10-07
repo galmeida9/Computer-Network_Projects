@@ -777,11 +777,6 @@ void questionGet(char * reply, char * topic, char * title, int fd) {
         sprintf(path, "client/%s/%s_%s.txt", topic, title, AN);
         offset += (11 + floor(log10(abs(asize))));
         if (recvTCPWriteFile(fd, path, &reply, BUFFER_SIZE, &offset, asize) == -1) printf("Erro ao escrever o ficheiro da pergunta.\n");
-        
-        // Read answer 
-        //sprintf(format, "%%%dc %%d", asize);
-        //sscanf(reply + offset, format, adata, &aIMG);
-        //offset += asize + 3;
 
         sscanf(reply + offset, "%d", &aIMG);
         offset += 2;

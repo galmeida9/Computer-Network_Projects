@@ -773,10 +773,9 @@ char* getAnswerInformation(char *path, char *question, char *numb, int fd) {
         int sizeAux = aisize;
         char *aidata = malloc(sizeof(char) * (BUFFER_SIZE));
 
-        int nWrote = 0;
         while (sizeAux > 0){
             int nRead = fread(aidata, 1 , BUFFER_SIZE, imageFd);
-            nWrote = nWrote + write(fd, aidata, nRead);
+            write(fd, aidata, nRead);
             sizeAux = sizeAux - BUFFER_SIZE;
         }
 
