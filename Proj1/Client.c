@@ -206,7 +206,6 @@ int recvTCPWriteFile(int fd, char* filePath, char** bufferAux, int bufferSize, i
         printf("\r%s Copying file %.0f%%", filePath, percentage);
         toWrite = toWrite - sizeAux;
         if (toWrite <= 0) {
-            *offset = *offset + sizeAux;
             nMsg = read(fd, buffer, bufferSize);
             *offset = 0;
             break;
@@ -520,8 +519,8 @@ void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChos
     if (strlen(text_file) == 0) return;
 
     /*Get the question and its size*/    
-    char *adata;
-    long asize;
+    char *qdata;
+    long qsize;
     FILE *questionFd;
 
     char *textPath = (char*)malloc(sizeof(char) * BUFFER_SIZE);
@@ -536,26 +535,37 @@ void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChos
 
     //Get size of file
     fseek(questionFd, 0L, SEEK_END);
-    asize = ftell(questionFd);
+    qsize = ftell(questionFd);
     fseek(questionFd, 0L, SEEK_SET);
 
-    adata = (char*) malloc(sizeof(char) * (asize + 1));
-    strcpy(adata, "");
-    fread(adata,asize,sizeof(unsigned char),questionFd);
+    //Send information
+    char *response = malloc(sizeof(char) * BUFFER_SIZE);
+    snprintf(response, BUFFER_SIZE, "QUS %d %s %s %ld ", aUserID, topicChosen, question, qsize);
+    SendMessageTCP(response, fd, res);
+
+    //Send file data
+    qdata = (char*) malloc(sizeof(char)*BUFFER_SIZE);
+    int sizeAux = qsize;
+
+    while (sizeAux > 0 ){
+        int nRead = fread(qdata, 1 , BUFFER_SIZE, questionFd);
+        write(*fd, qdata, nRead);
+        sizeAux = sizeAux - BUFFER_SIZE;
+    }
 
     fclose(questionFd);
+    free(textPath);
+    free(qdata);
 
     /*Get the question's image information*/
     long aisize;
     char *aidata;
-    char *response = malloc(sizeof(char) * BUFFER_SIZE);
     if (img_file != NULL) {
         FILE *imageFd;
+        printf("starting image\n");
         imageFd = fopen(img_file, "rb");
         if (imageFd == NULL) {
             printf("Can't find image file.\n");
-            free(textPath);
-            free(adata);
             free(response);
             return;
         }
@@ -568,9 +578,11 @@ void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChos
         char *aiext = strtok(img_file, ".");
         aiext = strtok(NULL, ".");
 
-        snprintf(response, BUFFER_SIZE, "QUS %d %s %s %ld %s 1 %s %ld ", aUserID, topicChosen, question, asize, adata, aiext, aisize);
-        SendMessageTCP(response, fd, res);
+        //Send image information
+        snprintf(response, BUFFER_SIZE, " 1 %s %ld ", aiext, aisize);
+        write(*fd, response, strlen(response));
 
+        //Send image data
         aidata = (char*) malloc(sizeof(char) * BUFFER_SIZE);
         int sizeAux = aisize;
         
@@ -587,12 +599,9 @@ void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChos
     }
 
     else {
-        snprintf(response, BUFFER_SIZE, "QUS %d %s %s %ld %s 0\n", aUserID, topicChosen, question, asize, adata);
-        SendMessageTCP(response, fd, res);
+        snprintf(response, BUFFER_SIZE,  " 0\n");
+        write(*fd, " 0\n", strlen(" 0\n"));
     }
-
-    free(adata);
-    free(textPath);
     
     free(response);
 
