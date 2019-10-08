@@ -47,7 +47,7 @@ void addToTopicList(char* topic, char *usedId);
 void freeTopicInList();
 char* questionGet(char *input, int fd);
 char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOfAnswers, int qIMG, char *qixt, int fd);
-char* getAnswerInformation(char *path, char *question, char *numb, int fd);
+void getAnswerInformation(char *path, char *question, char *numb, int fd);
 char * listOfQuestions(char * topic);
 char* submitAnswer(char* input, int sizeInput, int fd);
 char* questionSubmit(char *input);
@@ -661,6 +661,7 @@ char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOf
     fseek(questionFd, 0L, SEEK_SET);
     char *qdata = malloc(sizeof(char) * (qsize + 1));
     fread(qdata,qsize,sizeof(unsigned char),questionFd);
+    qdata[qsize] = '\0';
 
     fclose(questionFd);
     free(questionPath);
@@ -705,6 +706,8 @@ char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOf
         write(fd, response, strlen(response));
     }
 
+    free(qdata);
+
     /*Get the answers information*/
     for (int i = 1; (i <= numberOfAnswers) && (i <= DISPLAY_ANSWERS); i++) {
         char *questionNumber = malloc(sizeof(char) * AN_SIZE);
@@ -714,11 +717,10 @@ char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOf
     }
 
     write(fd, "\n", strlen("\n"));
-    free(qdata);
     return response;
 }
 
-char* getAnswerInformation(char *path, char *question, char *numb, int fd) {
+void getAnswerInformation(char *path, char *question, char *numb, int fd) {
     /*get information about the answer*/
     char *answerDesc = malloc(sizeof(char) * BUFFER_SIZE);
     FILE *answerDescFd;
@@ -813,7 +815,8 @@ char* getAnswerInformation(char *path, char *question, char *numb, int fd) {
 
     free(adata);
     free(line);
-    return response;
+    free(response);
+    return;
 }
 
 char* listOfQuestions(char * topic) {

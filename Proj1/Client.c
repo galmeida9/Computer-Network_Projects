@@ -372,6 +372,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             freeQuestions(numQuestions, questions);
             freeTopics(numTopics, topics);
             free(line);
+            free(topicChosen);
             return;
         }
         else *userId == -1 ? printf("You need to register first before performing any commands.\n") : printf("Invalid command.\n");
@@ -442,6 +443,7 @@ char* topicSelectNum(int numTopics, char** topics, int topicChosen){
     char *userId = strdup(strtok(NULL, ":"));
     printf("selected topic: %s (%s)\n", topic, userId);
     free(topicInfo);
+    free(userId);
     return topic;
 }
 
@@ -743,6 +745,8 @@ void questionGet(char * reply, char * topic, char * title, int fd) {
         mkdir(directory, 0700);
     }
 
+    free(directory);
+
     // Write text file
     if (recvTCPWriteFile(fd, path, &reply, BUFFER_SIZE, &offset, qsize) == -1) printf("Erro ao escrever o ficheiro da pergunta.\n");
 
@@ -772,6 +776,7 @@ void questionGet(char * reply, char * topic, char * title, int fd) {
     printf("\nQ: %s\n", question);
     fclose(fp);
     free(path);
+    free(question);
     
     AN = (char*) malloc(3); 
     for (int i = 0; i < N; i++) {
@@ -794,6 +799,9 @@ void questionGet(char * reply, char * topic, char * title, int fd) {
             offset += 1;
         }
 
+        free(path);
         //printf("A%02d: %s\n", i + 1, adata);
     }
+
+    free(AN);
 }
