@@ -9,6 +9,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <sys/stat.h>
 
 #define PORT "58013"
 #define BUFFER_SIZE 2048
@@ -46,7 +47,7 @@ void addToTopicList(char* topic, char *usedId);
 void freeTopicInList();
 char* questionGet(char *input, int fd);
 char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOfAnswers, int qIMG, char *qixt, int fd);
-char* getAnswerInformation(char *path, char *question, char *numb, int fd);
+void getAnswerInformation(char *path, char *question, char *numb, int fd);
 char * listOfQuestions(char * topic);
 char* submitAnswer(char* input, int sizeInput, int fd);
 char* questionSubmit(char *input);
@@ -420,6 +421,27 @@ char* topicPropose(char *input) {
     else if (isTopicInList(topic)) response = strdup("PTR DUP\n");
     else {
         addToTopicList(topic, id);
+
+        // Create folder for the new topic
+        int lenDirectoryPath = strlen(TOPIC_FOLDER) + strlen(topic) + 1;
+        char * directory = malloc(sizeof(char) * (lenDirectoryPath));
+        snprintf(directory, lenDirectoryPath, "%s%s", TOPIC_FOLDER, topic);
+
+        struct stat st = {0};
+        if (stat(directory, &st) == -1) {
+            mkdir(directory, 0700);
+        }
+
+        free(directory);
+        int lenQuestionPath = strlen(TOPIC_FOLDER) + strlen(topic) + strlen(QUESTIONS_LIST) + 1;
+        char * questionPath = malloc(sizeof(char) * (lenQuestionPath));
+        snprintf(questionPath, lenQuestionPath, "%s%s%s", TOPIC_FOLDER, topic, QUESTIONS_LIST);
+
+        FILE *topicFd = fopen(questionPath, "w");
+        if (topicFd == NULL) printf("Failed to create file for the new topic.\n");
+        fclose(topicFd);
+        free(questionPath);
+        
         response = strdup("PTR OK\n");
     }
 
@@ -639,6 +661,7 @@ char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOf
     fseek(questionFd, 0L, SEEK_SET);
     char *qdata = malloc(sizeof(char) * (qsize + 1));
     fread(qdata,qsize,sizeof(unsigned char),questionFd);
+    qdata[qsize] = '\0';
 
     fclose(questionFd);
     free(questionPath);
@@ -683,6 +706,8 @@ char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOf
         write(fd, response, strlen(response));
     }
 
+    free(qdata);
+
     /*Get the answers information*/
     for (int i = 1; (i <= numberOfAnswers) && (i <= DISPLAY_ANSWERS); i++) {
         char *questionNumber = malloc(sizeof(char) * AN_SIZE);
@@ -692,11 +717,10 @@ char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOf
     }
 
     write(fd, "\n", strlen("\n"));
-    free(qdata);
     return response;
 }
 
-char* getAnswerInformation(char *path, char *question, char *numb, int fd) {
+void getAnswerInformation(char *path, char *question, char *numb, int fd) {
     /*get information about the answer*/
     char *answerDesc = malloc(sizeof(char) * BUFFER_SIZE);
     FILE *answerDescFd;
@@ -791,7 +815,8 @@ char* getAnswerInformation(char *path, char *question, char *numb, int fd) {
 
     free(adata);
     free(line);
-    return response;
+    free(response);
+    return;
 }
 
 char* listOfQuestions(char * topic) {
