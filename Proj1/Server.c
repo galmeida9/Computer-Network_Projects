@@ -223,11 +223,6 @@ char* processUDPMessage(char* buffer, int len){
         return response;
     }
 
-    else if (strcmp(command, "GQU") == 0) {
-        free(bufferBackup);
-        return NULL;
-    }
-
     else if (strcmp(command, "LQU") == 0) {
         command = strtok(NULL, " ");
         if (command == NULL) {
