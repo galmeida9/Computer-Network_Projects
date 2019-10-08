@@ -693,9 +693,19 @@ char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOf
     fseek(questionFd, 0L, SEEK_END);
     long qsize = ftell(questionFd);
     fseek(questionFd, 0L, SEEK_SET);
-    char *qdata = malloc(sizeof(char) * (qsize + 1));
-    fread(qdata,qsize,sizeof(unsigned char),questionFd);
-    qdata[qsize] = '\0';
+
+    char *response = malloc(sizeof(char) * BUFFER_SIZE);
+    snprintf(response, BUFFER_SIZE, "QGR %d %ld ", qUserId, qsize);
+    write(fd, response, strlen(response));
+
+    char *qdata = (char*) malloc(sizeof(char)*BUFFER_SIZE);
+    int sizeAux = qsize;
+
+    while (sizeAux > 0 ){
+        int nRead = fread(qdata, 1 , BUFFER_SIZE, questionFd);
+        write(fd, qdata, nRead);
+        sizeAux = sizeAux - BUFFER_SIZE;
+    }
 
     fclose(questionFd);
     free(questionPath);
@@ -703,7 +713,6 @@ char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOf
     /*If there is a image get its size and data*/
     long qisize;
     char *qidata;
-    char *response = malloc(sizeof(char) * BUFFER_SIZE);
     if (qIMG) {
         char *imgPath = malloc(sizeof(char) * BUFFER_SIZE);
         FILE *imageFd;
@@ -715,14 +724,15 @@ char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOf
         qisize  = ftell(imageFd);
         fseek(imageFd, 0L, SEEK_SET);
 
-        snprintf(response, BUFFER_SIZE, "QGR %d %ld %s 1 %s %ld ", qUserId, qsize, qdata, qiext, qisize);
+        snprintf(response, BUFFER_SIZE, " 1 %s %ld ", qiext, qisize);
+        printf("/%d/\n", fd);
         write(fd, response, strlen(response));
 
         int sizeAux = qisize;
         char *qidata = malloc(sizeof(char) * (BUFFER_SIZE));
 
         while (sizeAux > 0){
-            int nRead = fread(qidata, 1 , BUFFER_SIZE,imageFd);
+            int nRead = fread(qidata, 1 , BUFFER_SIZE, imageFd);
             write(fd, qidata, nRead);
             sizeAux = sizeAux - BUFFER_SIZE;
         }
