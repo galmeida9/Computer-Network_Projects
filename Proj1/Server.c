@@ -9,6 +9,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <sys/stat.h>
 
 #define PORT "58013"
 #define BUFFER_SIZE 2048
@@ -425,6 +426,27 @@ char* topicPropose(char *input) {
     else if (isTopicInList(topic)) response = strdup("PTR DUP\n");
     else {
         addToTopicList(topic, id);
+
+        // Create folder for the new topic
+        int lenDirectoryPath = strlen(TOPIC_FOLDER) + strlen(topic) + 1;
+        char * directory = malloc(sizeof(char) * (lenDirectoryPath));
+        snprintf(directory, lenDirectoryPath, "%s%s", TOPIC_FOLDER, topic);
+
+        struct stat st = {0};
+        if (stat(directory, &st) == -1) {
+            mkdir(directory, 0700);
+        }
+
+        free(directory);
+        int lenQuestionPath = strlen(TOPIC_FOLDER) + strlen(topic) + strlen(QUESTIONS_LIST) + 1;
+        char * questionPath = malloc(sizeof(char) * (lenQuestionPath));
+        snprintf(questionPath, lenQuestionPath, "%s%s%s", TOPIC_FOLDER, topic, QUESTIONS_LIST);
+
+        FILE *topicFd = fopen(questionPath, "w");
+        if (topicFd == NULL) printf("Failed to create file for the new topic.\n");
+        fclose(topicFd);
+        free(questionPath);
+        
         response = strdup("PTR OK\n");
     }
 

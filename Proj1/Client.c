@@ -183,21 +183,27 @@ int recvTCPWriteFile(int fd, char* filePath, char** bufferAux, int bufferSize, i
 
     if (toWrite <= (bufferSize - *offset)) {
         fwrite(*bufferAux+*offset, sizeof(char), toWrite, fp);
+        printf("%s Copying file %d%%", filePath, toWrite / size * 100);
         *offset = *offset + toWrite + 1;
         toWrite = 0;
     }
     else if (*offset < (bufferSize)){
         fwrite(*bufferAux+*offset, sizeof(char), bufferSize-*offset, fp);
+        printf("%s Copying file %d%%", filePath, (bufferSize-*offset) / size * 100);
         toWrite = toWrite - (bufferSize-*offset);
     }
 
     //Receive message if needed
     ssize_t nMsg = 0;
     int i=0;
-    
+    float percentage = 0.0;
+
     while (toWrite > 0 && (nMsg = read(fd, buffer, 1))>0){
+        fflush(stdout);
         int sizeAux = toWrite > nMsg? nMsg : toWrite;
         fwrite(buffer, 1, sizeAux, fp);
+        percentage = (size - toWrite) * 1.0 / size * 100;
+        printf("\r%s Copying file %.0f%%", filePath, percentage);
         toWrite = toWrite - sizeAux;
         if (toWrite <= 0) {
             *offset = *offset + sizeAux;
@@ -213,6 +219,7 @@ int recvTCPWriteFile(int fd, char* filePath, char** bufferAux, int bufferSize, i
     fclose(fp);
     memcpy(*bufferAux, buffer, nMsg);
     free(buffer);
+    printf("\n");
     return 0;
 }
 
@@ -430,9 +437,11 @@ char* topicSelectNum(int numTopics, char** topics, int topicChosen){
         return NULL;
     }
 
-    char *topic = strtok(topics[topicChosen-1], ":");
-    char *userId = strtok(NULL, ":");
+    char *topicInfo = strdup(topics[topicChosen-1]);
+    char *topic = strdup(strtok(topicInfo, ":"));
+    char *userId = strdup(strtok(NULL, ":"));
     printf("selected topic: %s (%s)\n", topic, userId);
+    free(topicInfo);
     return topic;
 }
 
@@ -445,10 +454,12 @@ char* topicSelectName(int numTopics, char** topics, char* name){
         printf("Run tl first.\n");
         return NULL;
     }
-
+    
     for (i = 0; i < numTopics; i++){
-        char *nextTopic = strtok(topics[i],":");
-        userId = strtok(NULL,":");
+        char *topicInfo = strdup(topics[i]);
+        char *nextTopic = strdup(strtok(topicInfo, ":"));
+        userId = strdup(strtok(NULL,":"));
+        free(topicInfo);
         if (!strcmp(nextTopic, name)){
             topic = nextTopic;
             break;
@@ -456,7 +467,7 @@ char* topicSelectName(int numTopics, char** topics, char* name){
     }
 
     topic == NULL ? printf("Can't find that topic.\n") : printf("selected topic: %s (%s)\n", topic, userId);
-
+    free(userId);
     return topic;
 }
 
@@ -708,7 +719,7 @@ char * questionSelectName(char * name, int num_questions, char ** questions) {
 
 void questionGet(char * reply, char * topic, char * title, int fd) {
     int qsize, qisize, qIMG, offset, pathLen, dirLen;
-    int N, asize, aIMG, aisize;
+    int N = 0, asize, aIMG, aisize;
     char request[3], format[BUFFER_SIZE], qiext[3], * qidata;
     char * adata, aiext[3], * aidata, * path, * directory, *AN;
 
@@ -752,12 +763,6 @@ void questionGet(char * reply, char * topic, char * title, int fd) {
     offset += (3 + floor(log10(abs(N))));
 
     // Check answers
-    printf("%d stored files:\n", N);
-    printf("  %s/%s.txt", topic, title);
-    
-    for (int i = 0; i < N; i++)
-        printf(", %s/%s_%02d.txt", topic, title, i + 1);
-
     sprintf(path, "client/%s/%s.txt", topic, title);
     FILE * fp = fopen(path, "r");
     if (fp == NULL) exit(1);
