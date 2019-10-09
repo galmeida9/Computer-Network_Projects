@@ -10,6 +10,8 @@
 #include <assert.h>
 #include <math.h>
 #include <sys/stat.h>
+#include <signal.h>
+#include <errno.h>
 
 #define  DEFAULT_PORT "58013"
 #define BUFFER_SIZE 2048
@@ -40,6 +42,7 @@ char * questionSelectNum(int question, int num_questions, char ** questions);
 void questionGet(char * topic, char * questionChosen, int fd);
 char * questionSelectName(char * name, int num_questions, char ** questions);
 void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChosen, char* question, char* text_file, char* img_file);
+void handleTimeout(int sig);
 
 char *buffer;
 int debug = 0;
@@ -102,6 +105,7 @@ void parseArgs(int number, char** arguments, char **port, char **ip) {
 }
 
 void connectToServer(int *udp_fd, int *tcp_fd, char *ip, char *port, struct addrinfo hints, struct addrinfo **resUDP, struct addrinfo **resTCP) {
+    struct timeval tv = { 5, 0 };
     ssize_t n;
     memset(&hints,0, sizeof(hints));
     hints.ai_family=AF_INET;
@@ -115,6 +119,13 @@ void connectToServer(int *udp_fd, int *tcp_fd, char *ip, char *port, struct addr
 
         *udp_fd = socket((*resUDP)->ai_family, (*resUDP)->ai_socktype, (*resUDP)->ai_protocol);
         if (*udp_fd == -1) exit(1);
+
+        // Setting UDP socket timeout value
+        if(setsockopt(*udp_fd, SOL_SOCKET, SO_RCVTIMEO,(struct timeval *)&tv,sizeof(struct timeval))) {
+            printf("setsockopt UDP failed\n");
+            close(*udp_fd);
+            exit(2);
+        }
     }
 
     /*TCP Connection */
@@ -139,7 +150,12 @@ char* receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr) {
 
     while (strtok(buffer, "\n") == NULL) {
         n = recvfrom(fd, buffer, BUFFER_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
-        if (n == -1) exit(1);
+        if (n == -1) {
+            if ((errno != EAGAIN) && (errno != EWOULDBLOCK))
+                exit(1);
+            printf("server response timeout\n");
+            break;
+        }
     }
 
     if (debug == 1) printf("Received: |%s|\n", buffer);
@@ -148,10 +164,17 @@ char* receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr) {
 }
 
 void SendMessageTCP(char *message, int *fd, struct addrinfo **res) {
+    struct timeval tv = { 5, 0 };
     ssize_t n;
 
     *fd = socket((*res)->ai_family, (*res)->ai_socktype, (*res)->ai_protocol);
     if (*fd == -1) exit(1);
+    // Setting TCP socket timeout value
+    if(setsockopt(*fd, SOL_SOCKET, SO_RCVTIMEO,(struct timeval *)&tv,sizeof(struct timeval))) {
+        printf("setsockopt TCP failed\n");
+        close(*fd);
+        exit(2);
+    }
     
     n = connect(*fd, (*res)->ai_addr, (*res)->ai_addrlen);
     if (n == -1) exit(1);
@@ -166,9 +189,11 @@ char* receiveMessageTCP(int fd) {
     buffer[0] = '\0';
 
     n = read(fd, buffer, BUFFER_SIZE);
-    /*while (strtok(buffer, "\n") == NULL) {
-        /*if (n == -1) exit(1);
-    }*/
+    if (n == -1) {
+        if ((errno != EAGAIN) && (errno != EWOULDBLOCK))
+            exit(1);
+        printf("server response timeout\n");
+    }
     
     if (debug == 1) printf("Received: |%s|\n", buffer);
     return buffer;
@@ -248,7 +273,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             }
         }
 
-        else if ((strcmp(command, "topic_list\n") == 0 || strcmp(command, "tl\n") == 0) && *userId != -1)
+        else if ((strcmp(command, "topic_list\n") == 0 || strcmp(command, "tl\n") == 0) && *userId > 0)
             requestLTP(udp_fd, resUDP, addrlen, addr, topics, &numTopics);
 
         else if ((strcmp(command, "ts") == 0) && *userId != -1){
@@ -265,7 +290,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             }
         }
 
-        else if ((strcmp(command, "topic_select") == 0) && *userId != -1){
+        else if ((strcmp(command, "topic_select") == 0) && *userId > 0) {
             char *arg;
             command = strtok(NULL, " ");
             if (command != NULL){
@@ -294,11 +319,11 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
 
         }
 
-        else if ((strcmp(command, "question_list\n") == 0 || strcmp(command, "ql\n") == 0) && *userId != -1){
+        else if ((strcmp(command, "question_list\n") == 0 || strcmp(command, "ql\n") == 0) && *userId > 0) {
             numQuestions = getQuestionList(udp_fd, resUDP, addrlen, addr, topicChosen, questions);
         }
 
-        else if ((strcmp(command, "qg") == 0) && *userId != -1){
+        else if ((strcmp(command, "qg") == 0) && *userId > 0) {
             int question;
             char * arg, * reply;
             command = strtok(NULL, " ");
@@ -321,7 +346,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             }
         }
 
-        else if ((strcmp(command, "question_get") == 0) && *userId != -1){
+        else if ((strcmp(command, "question_get") == 0) && *userId > 0) {
             char *arg;
             command = strtok(NULL, " ");
 
@@ -342,7 +367,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             }
         }
 
-        else if ((strcmp(command, "question_submit") == 0 || strcmp(command, "qs") == 0) && *userId != -1){
+        else if ((strcmp(command, "question_submit") == 0 || strcmp(command, "qs") == 0) && *userId > 0) {
             char *question = NULL, *text_file = NULL, *img_file = NULL;
             command = strtok(NULL, "\n");
             questionChosen = strtok(command, " ");
@@ -352,7 +377,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             else submitQuestion(&tcp_fd, &resTCP, *userId, topicChosen, questionChosen, text_file, img_file);
         }
 
-        else if (((strcmp(command, "as") == 0) || (strcmp(command, "answer_submit") == 0)) && *userId != -1) { //TODO
+        else if (((strcmp(command, "as") == 0) || (strcmp(command, "answer_submit") == 0)) && *userId > 0) {
             answerPath = strtok(NULL, " ");
             answerImg = strtok(NULL, " ");
             answerSubmit(tcp_fd, &resTCP, *userId, topicChosen, questionChosen, strtok(answerPath, "\n"), answerImg);
@@ -375,7 +400,8 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             free(topicChosen);
             return;
         }
-        else *userId == -1 ? printf("You need to register first before performing any commands.\n") : printf("Invalid command.\n");
+
+        else *userId <= 0 ? printf("You need to register first before performing any commands.\n") : printf("Invalid command.\n");
         
         printf("\n");
     }

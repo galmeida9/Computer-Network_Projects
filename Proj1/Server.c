@@ -56,6 +56,7 @@ char* questionSubmit(char *input, int fd);
 int main(int argc, char** argv){
     char port[6];
     struct sigaction handle_kill;
+    struct timeval tv = { 5, 0 };
     sigset_t int_set;
     sigemptyset(&int_set);
     sigaddset(&int_set, SIGINT);
@@ -114,6 +115,13 @@ int main(int argc, char** argv){
 
     fdTCP = socket(resTCP->ai_family, resTCP->ai_socktype, resTCP->ai_protocol);
     if (fdTCP == -1) exit(1);
+
+    // Setting TCP socket timeout value    
+    if(setsockopt(fdTCP, SOL_SOCKET, SO_RCVTIMEO,(struct timeval *)&tv,sizeof(struct timeval))) {
+        printf("setsockopt TCP failed\n");
+        close(fdTCP);
+        exit(2);
+    }
 
     nTCP = bind(fdTCP, resTCP->ai_addr, resTCP->ai_addrlen);
     if (nTCP == -1) exit(1);
