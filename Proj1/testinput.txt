@@ -1,0 +1,7 @@
+reg 12345
+tl
+topic_select IOT
+ql
+qg 4
+exit
+

@@ -736,7 +736,7 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     char request[3], format[BUFFER_SIZE], qiext[3], * qidata;
     char * adata, aiext[3], * aidata, * path, * directory, *AN;
 
-    char* reply = malloc(BUFFER_SIZE); //= receiveMessageTCP(fd);
+    char* reply = malloc(BUFFER_SIZE);
     reply[0] = '\0';
     int nMsg = read(fd, reply, BUFFER_SIZE);
 
@@ -745,8 +745,6 @@ void questionGet(char *topic, char *questionChosen, int fd) {
         return;
     }
 
-    //read(fd, reply, BUFFER_SIZE);
-    //printf("read: %s\n", reply);
     sscanf(reply, "%*s %*d %d", &qsize);
 
     offset = 3 + 1 + 5 + 1 + floor(log10(abs(qsize))) + 1 + 1; // get len of int
@@ -771,7 +769,11 @@ void questionGet(char *topic, char *questionChosen, int fd) {
         offset = 0;
     }
     if (recvTCPWriteFile(fd, path, &reply, BUFFER_SIZE, &offset, qsize) == -1) printf("Erro ao escrever o ficheiro da pergunta.\n");
-
+    
+    if (offset != 0 && offset >= nMsg) {
+        nMsg = read(fd, reply, BUFFER_SIZE);
+        offset = 1;
+    }
     sscanf(reply + offset, "%d", &qIMG);
 
     if (qIMG) {
@@ -801,22 +803,20 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     
     // Check answers
     AN = (char*) malloc(3); 
-    printf("N:/%d/\n", N);
     for (int i = 0; i < N; i++) {
         // Parse relevant answer info
         int userId = 0;
         sscanf(reply + offset, "%s %d %d", AN, &userId ,&asize);
-        printf("/%s,%d,%d/\n", AN, userId, asize);
         pathLen = strlen("client/") + strlen(topic) + strlen("/") + strlen(questionChosen) + strlen("_") + strlen(AN) + strlen(".txt") + 1;
         path = (char*) malloc(pathLen);
         sprintf(path, "client/%s/%s_%s.txt", topic, questionChosen, AN);
         offset += 2 + 1 + 5 + 1 + floor(log10(abs(asize))) + 1 + 1;
         if (recvTCPWriteFile(fd, path, &reply, BUFFER_SIZE, &offset, asize) == -1) printf("Erro ao escrever o ficheiro da pergunta.\n");
+        if (offset == 0) offset++;
 
         sscanf(reply + offset, "%d", &aIMG);
-        offset += 4;
+        offset += 2;
 
-        printf("IMG:/%d/\n", aIMG);
         if (aIMG) {
             sscanf(reply + offset, "%s %d", aiext, &aisize);
             sprintf(path, "client/%s/%s_%s.%s", topic, questionChosen, AN, aiext);
@@ -825,8 +825,14 @@ void questionGet(char *topic, char *questionChosen, int fd) {
             offset += 1;
         }
 
+        else {
+            if (offset != 0 && offset >= nMsg) {
+                nMsg = read(fd, reply, BUFFER_SIZE);
+                offset = 1;
+            }
+        }
+
         free(path);
-        if (i==4 )break;
     }
 
     free(AN);
