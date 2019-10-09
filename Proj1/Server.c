@@ -797,7 +797,6 @@ void getAnswerInformation(char *path, char *question, char *numb, int fd) {
     char *answerPath = malloc(sizeof(char) * BUFFER_SIZE);
     snprintf(answerPath, BUFFER_SIZE, "%s/%s_%s.txt", path, question, numb);
     
-    char *adata;
     long asize;
     len = 0;
     FILE *answerFd;
@@ -809,11 +808,18 @@ void getAnswerInformation(char *path, char *question, char *numb, int fd) {
     asize = ftell(answerFd);
     fseek(answerFd, 0L, SEEK_SET);
 
-    //adata = (char*) malloc(sizeof(char) * (asize + 1));
-    adata = (char*) calloc(asize + 1, sizeof(char));
-    
-    //strcpy(adata, ""); ????
-    fread(adata,asize,sizeof(unsigned char),answerFd);
+    char *response = malloc(sizeof(char) * BUFFER_SIZE);
+    snprintf(response, BUFFER_SIZE, " %s %d %ld ", numb, aUserID, asize);
+    write(fd, response, strlen(response));
+
+    char *adata = (char*) malloc(sizeof(char)*BUFFER_SIZE);
+    int sizeAux = asize;
+
+    while (sizeAux > 0 ){
+        int nRead = fread(adata, 1 , BUFFER_SIZE, answerFd);
+        write(fd, adata, nRead);
+        sizeAux = sizeAux - BUFFER_SIZE;
+    }
 
     fclose(answerFd);
     free(answerPath);
@@ -821,7 +827,6 @@ void getAnswerInformation(char *path, char *question, char *numb, int fd) {
     /*Get the answer's image information*/
     long aisize;
     char *aidata;
-    char *response = malloc(sizeof(char) * BUFFER_SIZE);
     if (aIMG) {
         char *imgPath = malloc(sizeof(char) * BUFFER_SIZE);
         FILE *imageFd;
@@ -834,7 +839,7 @@ void getAnswerInformation(char *path, char *question, char *numb, int fd) {
         aisize = ftell(imageFd);
         fseek(imageFd, 0L, SEEK_SET);
 
-        snprintf(response, BUFFER_SIZE, " %s %d %ld %s %d %s %ld ", numb, aUserID, asize, adata, aIMG, aiext, aisize);
+        snprintf(response, BUFFER_SIZE, " 1 %s %ld ", aiext, aisize);
         write(fd, response, strlen(response));
 
         //Get image data
@@ -852,10 +857,7 @@ void getAnswerInformation(char *path, char *question, char *numb, int fd) {
         free(aidata);
     }
 
-    else {
-        snprintf(response, BUFFER_SIZE, " %s %d %ld %s 0", numb, aUserID, asize, adata);
-        write(fd, response, strlen(response));
-    }
+    else write(fd, " 0", 2);
 
     free(adata);
     free(line);
