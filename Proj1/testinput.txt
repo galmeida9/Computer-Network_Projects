@@ -1,0 +1,12 @@
+reg 12345
+tl
+ts 1
+ql
+qg 1
+qg 1
+qg 1
+qg 1
+qg 1
+qg 1
+exit
+
