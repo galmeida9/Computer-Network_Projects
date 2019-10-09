@@ -541,7 +541,7 @@ void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChos
     fseek(questionFd, 0L, SEEK_SET);
 
     //Send information
-    char *response = malloc(sizeof(char) * BUFFER_SIZE);
+    char *response = malloc(sizeof(char) * (strlen(text_file) + strlen(".txt") + 1));
     snprintf(response, BUFFER_SIZE, "QUS %d %s %s %ld ", aUserID, topicChosen, question, qsize);
     SendMessageTCP(response, fd, res);
 
@@ -620,7 +620,10 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
     size_t len = 0;
     ssize_t nread;
     FILE *answerFd;
-    answerFd = fopen(text_file, "r");
+    char *answerPath = malloc(strlen(text_file) + strlen(".txt") + 1);
+    sprintf(answerPath, "%s.txt", text_file);
+    printf("path: %s\n", answerPath);
+    answerFd = fopen(answerPath, "r");
     if (answerFd == NULL) {
         printf("Can't find answer file.\n");
         return;
@@ -632,6 +635,7 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
     char *adata = malloc(sizeof(char) * (asize + 1));
     fread(adata,asize,sizeof(unsigned char),answerFd);
     fclose(answerFd);
+    free(answerPath);
 
     char *message;
     int aIMG = 0;

@@ -47,7 +47,7 @@ int isTopicInList(char *topic);
 void addToTopicList(char* topic, char *usedId);
 void freeTopicInList();
 char* questionGet(char *input, int fd);
-char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOfAnswers, int qIMG, char *qixt, int fd);
+void questionGetReadFiles(char* path, char* question, int qUserId, int numberOfAnswers, int qIMG, char *qixt, int fd);
 void getAnswerInformation(char *path, char *question, char *numb, int fd);
 char * listOfQuestions(char * topic);
 char* submitAnswer(char* input, int sizeInput, int fd);
@@ -172,8 +172,10 @@ int main(int argc, char** argv){
                 char *response = processTCPMessage(bufferTCP, nMsg, newfd);
 
                 /*Send response*/
-                nMsg = write(newfd, response, strlen(response));
-                if (nMsg == -1) exit(1);
+                if (response != NULL) {
+                    nMsg = write(newfd, response, strlen(response));
+                    if (nMsg == -1) exit(1);
+                }
 
                 free(response);
                 free(bufferTCP);
@@ -255,9 +257,9 @@ char* processTCPMessage(char* buffer, int len, int fd){
     
     command = strtok(buffer, " ");
 
-    if (!strcmp(command, "GQU"))
+    if (!strcmp(command, "GQU")) {
         response = questionGet(bufferBackup, fd);
-
+    }
     else if (!strcmp(command, "QUS"))
         response = questionSubmit(bufferBackup, fd);
 
@@ -505,78 +507,6 @@ void freeTopicInList() {
     for (int i = 0; i < numberOfTopics; i++) free(listWithTopics[i]);
 }
 
-char* questionGet(char *input, int fd) {
-    strtok(input, " ");
-    char *response;
-    char *topic = strtok(NULL, " ");
-    char *question = strtok(NULL, "\n");
-
-    if (topic == NULL) {
-        response = strdup("QGR ERR\n");
-        return response;
-    }
-    else if (!isTopicInList(topic)) {
-        response = strdup("QGR EOF\n");
-        return response;
-    }
-
-    if (question == NULL) {
-        response = strdup("QGR ERR\n");
-        return response;
-    }
-
-    char *path = malloc(sizeof(char) * BUFFER_SIZE);
-
-    strcpy(path, TOPIC_FOLDER);
-    strcat(path, topic);
-    path[strlen(path)] = '\0';
-    char *topicFolderPath = strdup(path);
-    strcat(path, QUESTIONS_LIST);
-
-    int qIMG = 0;
-    char *qiext = NULL;
-    int foundQuestion = 0;
-    int qUserId;
-    int numberOfAnswers;
-    char *line = NULL;
-    size_t len = 0;
-    ssize_t nread;
-    FILE *questionsFd;
-
-    questionsFd = fopen(path, "r");
-    if (questionsFd == NULL) exit(1);
-
-    while ((nread = getline(&line, &len, questionsFd)) != -1) {
-        char *token = strtok(line, ":");
-
-        if (strcmp(token, question) == 0) {
-            foundQuestion = 1;
-            qUserId = atoi(strtok(NULL, ":"));
-            numberOfAnswers = atoi(strtok(NULL, ":"));
-            if (strcmp(strtok(NULL, ":"), "1") == 0) {
-                qiext = strtok(NULL, ":");
-                qIMG = 1;
-            }
-            break;
-        }
-    }
-
-    fclose(questionsFd);
-    free(path);
-
-    if (!foundQuestion) {
-        response = strdup("QGR EOF\n");
-        free(topicFolderPath);
-        free(line);
-        return response;
-    }
-
-    response = questionGetReadFiles(topicFolderPath, question, qUserId, numberOfAnswers, qIMG, qiext, fd);
-    free(topicFolderPath);
-    free(line);
-    return response;
-}
-
 char* questionSubmit(char * input, int fd) {
 	int qUserId, found, NQ = 0;
 	int qsize = 0, offset = 0;
@@ -678,7 +608,80 @@ char* questionSubmit(char * input, int fd) {
 	return response;
 }
 
-char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOfAnswers, int qIMG, char *qiext, int fd) {
+char * questionGet(char *input, int fd) {
+    char *response;
+    strtok(input, " ");
+    char *topic = strtok(NULL, " ");
+    char *question = strtok(NULL, "\n");
+
+    if (topic == NULL) {
+        response = strdup("QGR ERR\n");
+        return response;
+    }
+    else if (!isTopicInList(topic)) {
+        response = strdup("QGR EOF\n");
+        return response;
+    }
+
+    if (question == NULL) {
+        response = strdup("QGR ERR\n");
+        return response;
+    }
+
+    char *path = malloc(sizeof(char) * BUFFER_SIZE);
+
+    strcpy(path, TOPIC_FOLDER);
+    strcat(path, topic);
+    path[strlen(path)] = '\0';
+    char *topicFolderPath = strdup(path);
+    strcat(path, QUESTIONS_LIST);
+
+    int qIMG = 0;
+    char *qiext = NULL;
+    int foundQuestion = 0;
+    int qUserId;
+    int numberOfAnswers;
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t nread;
+    FILE *questionsFd;
+
+    questionsFd = fopen(path, "r");
+    if (questionsFd == NULL) exit(1);
+
+    while ((nread = getline(&line, &len, questionsFd)) != -1) {
+        char *token = strtok(line, ":");
+
+        if (strcmp(token, question) == 0) {
+            foundQuestion = 1;
+            qUserId = atoi(strtok(NULL, ":"));
+            numberOfAnswers = atoi(strtok(NULL, ":"));
+            if (strcmp(strtok(NULL, ":"), "1") == 0) {
+                qiext = strtok(NULL, ":");
+                qIMG = 1;
+            }
+            break;
+        }
+    }
+
+    fclose(questionsFd);
+    free(path);
+
+    if (!foundQuestion) {
+        response = strdup("QGR EOF\n");
+        free(topicFolderPath);
+        free(line);
+        return response;
+    }
+
+    questionGetReadFiles(topicFolderPath, question, qUserId, numberOfAnswers, qIMG, qiext, fd);
+    free(topicFolderPath);
+    free(line);
+    printf("question \"%s\" files sent!\n", question);
+    return NULL;
+}
+
+void questionGetReadFiles(char* path, char* question, int qUserId, int numberOfAnswers, int qIMG, char *qiext, int fd) {
     /*Path for the requested question*/
     char *questionPath = malloc(sizeof(char) * BUFFER_SIZE);
     snprintf(questionPath, BUFFER_SIZE, "%s/%s.txt", path, question);
@@ -725,7 +728,6 @@ char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOf
         fseek(imageFd, 0L, SEEK_SET);
 
         snprintf(response, BUFFER_SIZE, " 1 %s %ld ", qiext, qisize);
-        printf("/%d/\n", fd);
         write(fd, response, strlen(response));
 
         int sizeAux = qisize;
@@ -761,7 +763,8 @@ char* questionGetReadFiles(char* path, char* question, int qUserId, int numberOf
     }
 
     write(fd, "\n", strlen("\n"));
-    return response;
+    free(response);
+    return;
 }
 
 void getAnswerInformation(char *path, char *question, char *numb, int fd) {

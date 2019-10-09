@@ -1,7 +1,12 @@
 reg 12345
 tl
-topic_select IOT
+ts 1
 ql
-qg 4
+qg 1
+qg 1
+qg 1
+qg 1
+qg 1
+qg 1
 exit
 
