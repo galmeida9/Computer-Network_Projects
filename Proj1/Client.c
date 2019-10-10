@@ -10,6 +10,8 @@
 #include <assert.h>
 #include <math.h>
 #include <sys/stat.h>
+#include <signal.h>
+#include <errno.h>
 
 #define  DEFAULT_PORT "58013"
 #define BUFFER_SIZE 2048
@@ -26,9 +28,9 @@ void SendMessageUDP(char *message, int fd, struct addrinfo *res);
 char* receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr);
 void SendMessageTCP(char *message, int *fd, struct addrinfo **res);
 char* receiveMessageTCP(int fd);
-int recvTCPWriteFile(int fd, char* filePath, char** bufferAux, int bufferSize, int* offset, int size);
+int recvTCPWriteFile(int fd, char* filePath, char** bufferAux, int *sizeMsg, int bufferSize, long* offset, int size);
 void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP, struct addrinfo *resTCP, socklen_t addrlen, struct sockaddr_in addr);
-void registerNewUser(int id, int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr);
+int registerNewUser(int id, int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr);
 void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char** topics, int* numTopics);
 void freeTopics(int numTopics, char** topics);
 char* topicSelectNum(int numTopics, char** topics, int topicChosen);
@@ -40,6 +42,7 @@ char * questionSelectNum(int question, int num_questions, char ** questions);
 void questionGet(char * topic, char * questionChosen, int fd);
 char * questionSelectName(char * name, int num_questions, char ** questions);
 void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChosen, char* question, char* text_file, char* img_file);
+void handleTimeout(int sig);
 
 char *buffer;
 int debug = 0;
@@ -102,6 +105,7 @@ void parseArgs(int number, char** arguments, char **port, char **ip) {
 }
 
 void connectToServer(int *udp_fd, int *tcp_fd, char *ip, char *port, struct addrinfo hints, struct addrinfo **resUDP, struct addrinfo **resTCP) {
+    struct timeval tv = { 5, 0 };
     ssize_t n;
     memset(&hints,0, sizeof(hints));
     hints.ai_family=AF_INET;
@@ -115,6 +119,13 @@ void connectToServer(int *udp_fd, int *tcp_fd, char *ip, char *port, struct addr
 
         *udp_fd = socket((*resUDP)->ai_family, (*resUDP)->ai_socktype, (*resUDP)->ai_protocol);
         if (*udp_fd == -1) exit(1);
+
+        // Setting UDP socket timeout value
+        if(setsockopt(*udp_fd, SOL_SOCKET, SO_RCVTIMEO,(struct timeval *)&tv,sizeof(struct timeval))) {
+            printf("setsockopt UDP failed\n");
+            close(*udp_fd);
+            exit(2);
+        }
     }
 
     /*TCP Connection */
@@ -139,7 +150,12 @@ char* receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr) {
 
     while (strtok(buffer, "\n") == NULL) {
         n = recvfrom(fd, buffer, BUFFER_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
-        if (n == -1) exit(1);
+        if (n == -1) {
+            if ((errno != EAGAIN) && (errno != EWOULDBLOCK))
+                exit(1);
+            printf("server response timeout\n");
+            break;
+        }
     }
 
     if (debug == 1) printf("Received: |%s|\n", buffer);
@@ -148,10 +164,17 @@ char* receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr) {
 }
 
 void SendMessageTCP(char *message, int *fd, struct addrinfo **res) {
+    struct timeval tv = { 5, 0 };
     ssize_t n;
 
     *fd = socket((*res)->ai_family, (*res)->ai_socktype, (*res)->ai_protocol);
     if (*fd == -1) exit(1);
+    // Setting TCP socket timeout value
+    if(setsockopt(*fd, SOL_SOCKET, SO_RCVTIMEO,(struct timeval *)&tv,sizeof(struct timeval))) {
+        printf("setsockopt TCP failed\n");
+        close(*fd);
+        exit(2);
+    }
     
     n = connect(*fd, (*res)->ai_addr, (*res)->ai_addrlen);
     if (n == -1) exit(1);
@@ -166,49 +189,56 @@ char* receiveMessageTCP(int fd) {
     buffer[0] = '\0';
 
     n = read(fd, buffer, BUFFER_SIZE);
-    /*while (strtok(buffer, "\n") == NULL) {
-        /*if (n == -1) exit(1);
-    }*/
+    if (n == -1) {
+        if ((errno != EAGAIN) && (errno != EWOULDBLOCK))
+            exit(1);
+        printf("server response timeout\n");
+    }
     
     if (debug == 1) printf("Received: |%s|\n", buffer);
     return buffer;
 }
 
-int recvTCPWriteFile(int fd, char* filePath, char** bufferAux, int bufferSize, int* offset, int size){
+int recvTCPWriteFile(int fd, char* filePath, char** bufferAux, int* sizeMsg, int bufferSize, long* offset, int size){
     char *buffer = (char*) malloc(sizeof(char)*bufferSize);
     //Open file
-    FILE* fp = fopen(filePath, "w");
+    FILE* fp = fopen(filePath, "wb");
     if (fp == NULL) return -1;
 
     int toWrite = size;
-
-    if (toWrite <= (bufferSize - *offset)) {
+    
+    if (toWrite <= (*sizeMsg - *offset)) {
         fwrite(*bufferAux+*offset, sizeof(char), toWrite, fp);
         printf("%s Copying file %d%%", filePath, toWrite / size * 100);
         *offset = *offset + toWrite + 1;
         toWrite = 0;
     }
-    else if (*offset < (bufferSize)){
-        fwrite(*bufferAux+*offset, sizeof(char), bufferSize-*offset, fp);
-        printf("%s Copying file %d%%", filePath, (bufferSize-*offset) / size * 100);
-        toWrite = toWrite - (bufferSize-*offset);
+    else if (*offset < (*sizeMsg)){
+        fwrite(*bufferAux+*offset, sizeof(char), *sizeMsg-*offset, fp);
+        printf("%s Copying file %ld%%", filePath, (*sizeMsg-*offset) / size * 100);
+        toWrite = toWrite - (*sizeMsg-*offset);
     }
 
     //Receive message if needed
     ssize_t nMsg = 0;
     int i=0;
     float percentage = 0.0;
+    int sizeToRead = toWrite > BUFFER_SIZE ? BUFFER_SIZE : toWrite;
 
-    while (toWrite > 0 && (nMsg = read(fd, buffer, 1))>0){
+    while (toWrite > 0 && (nMsg = read(fd, buffer, sizeToRead))>0){
+
         fflush(stdout);
         int sizeAux = toWrite > nMsg? nMsg : toWrite;
         fwrite(buffer, 1, sizeAux, fp);
         percentage = (size - toWrite) * 1.0 / size * 100;
+
         printf("\r%s Copying file %.0f%%", filePath, percentage);
         toWrite = toWrite - sizeAux;
+        sizeToRead = toWrite > BUFFER_SIZE ? BUFFER_SIZE : toWrite;
         if (toWrite <= 0) {
             nMsg = read(fd, buffer, bufferSize);
             *offset = 0;
+            *sizeMsg = nMsg;
             break;
         }
         memset(buffer, 0, sizeof(buffer));
@@ -241,14 +271,18 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             command = strtok(NULL, " ");
             if (command != NULL && strlen(command) == ID_SIZE + 1) {
                 *userId = atoi(strtok(command, "\n"));
-                strtok(NULL, " ") != NULL  || *userId == 0? printf("Invalid command.\n") : registerNewUser(*userId, udp_fd, resUDP, addrlen, addr);
+                if (strtok(NULL, " ") != NULL  || *userId == 0) printf("Invalid command.\n");
+                else {
+                    int ans = registerNewUser(*userId, udp_fd, resUDP, addrlen, addr);
+                    if (ans == 0) *userId = -1;
+                }
             }
             else {
                 printf("Invalid command.\n");
             }
         }
 
-        else if ((strcmp(command, "topic_list\n") == 0 || strcmp(command, "tl\n") == 0) && *userId != -1)
+        else if ((strcmp(command, "topic_list\n") == 0 || strcmp(command, "tl\n") == 0) && *userId > 0)
             requestLTP(udp_fd, resUDP, addrlen, addr, topics, &numTopics);
 
         else if ((strcmp(command, "ts") == 0) && *userId != -1){
@@ -265,7 +299,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             }
         }
 
-        else if ((strcmp(command, "topic_select") == 0) && *userId != -1){
+        else if ((strcmp(command, "topic_select") == 0) && *userId > 0) {
             char *arg;
             command = strtok(NULL, " ");
             if (command != NULL){
@@ -294,11 +328,11 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
 
         }
 
-        else if ((strcmp(command, "question_list\n") == 0 || strcmp(command, "ql\n") == 0) && *userId != -1){
+        else if ((strcmp(command, "question_list\n") == 0 || strcmp(command, "ql\n") == 0) && *userId > 0) {
             numQuestions = getQuestionList(udp_fd, resUDP, addrlen, addr, topicChosen, questions);
         }
 
-        else if ((strcmp(command, "qg") == 0) && *userId != -1){
+        else if ((strcmp(command, "qg") == 0) && *userId > 0) {
             int question;
             char * arg, * reply;
             command = strtok(NULL, " ");
@@ -321,7 +355,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             }
         }
 
-        else if ((strcmp(command, "question_get") == 0) && *userId != -1){
+        else if ((strcmp(command, "question_get") == 0) && *userId > 0) {
             char *arg;
             command = strtok(NULL, " ");
 
@@ -342,7 +376,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             }
         }
 
-        else if ((strcmp(command, "question_submit") == 0 || strcmp(command, "qs") == 0) && *userId != -1){
+        else if ((strcmp(command, "question_submit") == 0 || strcmp(command, "qs") == 0) && *userId > 0) {
             char *question = NULL, *text_file = NULL, *img_file = NULL;
             command = strtok(NULL, "\n");
             questionChosen = strtok(command, " ");
@@ -352,7 +386,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             else submitQuestion(&tcp_fd, &resTCP, *userId, topicChosen, questionChosen, text_file, img_file);
         }
 
-        else if (((strcmp(command, "as") == 0) || (strcmp(command, "answer_submit") == 0)) && *userId != -1) { //TODO
+        else if (((strcmp(command, "as") == 0) || (strcmp(command, "answer_submit") == 0)) && *userId > 0) {
             answerPath = strtok(NULL, " ");
             answerImg = strtok(NULL, " ");
             answerSubmit(tcp_fd, &resTCP, *userId, topicChosen, questionChosen, strtok(answerPath, "\n"), answerImg);
@@ -375,13 +409,14 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             free(topicChosen);
             return;
         }
-        else *userId == -1 ? printf("You need to register first before performing any commands.\n") : printf("Invalid command.\n");
+
+        else *userId <= 0 ? printf("You need to register first before performing any commands.\n") : printf("Invalid command.\n");
         
         printf("\n");
     }
 }
 
-void registerNewUser(int id, int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr) {
+int registerNewUser(int id, int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr) {
     char *message = malloc(sizeof(char) * REGISTER_SIZE);
 
     snprintf(message, REGISTER_SIZE, "REG %d\n", id);
@@ -389,6 +424,7 @@ void registerNewUser(int id, int fd, struct addrinfo *res, socklen_t addrlen, st
     char* status = receiveMessageUDP(fd, addrlen, addr);
     strcmp(status, "RGR OK") ==  0 ? printf("User \"%d\" registered\n", id) : printf("Could not register user, invalid user ID.\n");
     free(message);
+    return !strcmp(status, "RGR OK");
 }
 
 void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char** topics, int* numTopics) {
@@ -535,6 +571,15 @@ void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChos
         return;
     }
 
+    if (img_file != NULL){
+        FILE *imageFd = fopen(img_file, "rb");
+        if (imageFd == NULL){
+            printf("Can't find image file.\n");
+            return;
+        }
+        fclose(imageFd);
+    }
+
     //Get size of file
     fseek(questionFd, 0L, SEEK_END);
     qsize = ftell(questionFd);
@@ -564,7 +609,6 @@ void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChos
     char *aidata;
     if (img_file != NULL) {
         FILE *imageFd;
-        printf("starting image\n");
         imageFd = fopen(img_file, "rb");
         if (imageFd == NULL) {
             printf("Can't find image file.\n");
@@ -735,21 +779,23 @@ char * questionSelectName(char * name, int num_questions, char ** questions) {
 }
 
 void questionGet(char *topic, char *questionChosen, int fd) {
-    int qsize, qisize, qIMG, offset, pathLen, dirLen;
-    int N = 0, asize, aIMG, aisize;
+    int qIMG, pathLen, dirLen, userId, N = 0, aIMG;
+    long qsize = 0, qisize, offset = 0, asize, aisize;
     char request[3], format[BUFFER_SIZE], qiext[3], * qidata;
     char * adata, aiext[3], * aidata, * path, * directory, *AN;
 
-    char* reply = malloc(BUFFER_SIZE);
-    reply[0] = '\0';
-    int nMsg = read(fd, reply, BUFFER_SIZE);
+    char *reply = (char *) malloc(BUFFER_SIZE * sizeof(char));
+    if (reply == NULL) return;
+    int nMsg;
+    while ( (nMsg = read(fd, reply, BUFFER_SIZE))<= 0 );
+    //reply[nMsg] = '\0';
 
     if (!strcmp(reply, "QGR EOF") || !strcmp(reply, "QGR ERR")) {
         printf("an error occurred while processing your request\n");
         return;
     }
 
-    sscanf(reply, "%*s %*d %d", &qsize);
+    sscanf(reply, "%*s %*d %ld", &qsize);
 
     offset = 3 + 1 + 5 + 1 + floor(log10(abs(qsize))) + 1 + 1; // get len of int
     pathLen = strlen("client/") + strlen(topic) + strlen("/") + strlen(questionChosen) + strlen(".txt") + 1;
@@ -761,37 +807,70 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     sprintf(directory, "client/%s", topic);
 
     struct stat st = {0};
-    if (stat(directory, &st) == -1) {
+    if (stat(directory, &st) == -1)
         mkdir(directory, 0700);
-    }
-
     free(directory);
 
     // Write text file
     if (offset >= nMsg) {
-        nMsg = read(fd, reply, BUFFER_SIZE);
+        while ( (nMsg = read(fd, reply, BUFFER_SIZE))<= 0 );
+        //reply[nMsg] = '\0';
         offset = 0;
     }
-    if (recvTCPWriteFile(fd, path, &reply, BUFFER_SIZE, &offset, qsize) == -1) printf("Erro ao escrever o ficheiro da pergunta.\n");
+
+    printf("Got first msg.\n");
+    printf("nMsg: /%d/ offset:/%ld/\n", nMsg, offset);
+    printf("size: /%ld/\n", qsize);
+    if (offset >= 2) printf("/%c%c%c/\n", reply[offset-2], reply[offset-1], reply[offset]);
+    else printf("/%c%c%c/\n\n", reply[offset], reply[offset+1], reply[offset+2]);
+
+    if (recvTCPWriteFile(fd, path, &reply, &nMsg, BUFFER_SIZE, &offset, qsize) == -1) printf("Erro ao escrever o ficheiro da pergunta.\n");
+    if (offset == 0) offset++;
     
     if (offset != 0 && offset >= nMsg) {
-        nMsg = read(fd, reply, BUFFER_SIZE);
+        while ( (nMsg = read(fd, reply, BUFFER_SIZE))<= 0 );
+        //reply[nMsg] = '\0';
         offset = 1;
     }
+
+    printf("Got first file.\n");
+    printf("nMsg: /%d/ offset:/%ld/\n", nMsg, offset);
+    if (offset >= 2) printf("1/%c%c%c/\n", reply[offset-2], reply[offset-1], reply[offset]);
+    else printf("2/%c%c%c/\n\n", reply[offset], reply[offset+1], reply[offset+2]);
+    
     sscanf(reply + offset, "%d", &qIMG);
+    offset += 2;
+
+    printf("Got qIMG.\n");
+    printf("nMsg: /%d/ offset:/%ld/\n", nMsg, offset);
+    if (offset >= 2) printf("1/%c%c%c/\n", reply[offset-2], reply[offset-1], reply[offset]);
+    else printf("2/%c%c%c/\n\n", reply[offset], reply[offset+1], reply[offset+2]);
 
     if (qIMG) {
-        offset += 2;
-        sscanf(reply + offset, "%s %d", qiext, &qisize);
-
+        sscanf(reply + offset, "%s %ld", qiext, &qisize);
         sprintf(path, "client/%s/%s.%s", topic, questionChosen, qiext);
         offset += strlen(qiext) + 1 + floor(log10(abs(qisize))) + 1 + 1;
-        if (recvTCPWriteFile(fd, path, &reply, BUFFER_SIZE, &offset, qisize) == -1) printf("Erro ao escrever o ficheiro da pergunta.\n");
+        if (recvTCPWriteFile(fd, path, &reply, &nMsg, BUFFER_SIZE, &offset, qisize) == -1) printf("Erro ao escrever o ficheiro da pergunta.\n");
+        if (offset == 0) offset++;
     }
 
+    if (offset != 0 && offset >= nMsg) {
+        while ( (nMsg = read(fd, reply, BUFFER_SIZE))<= 0 );
+        //reply[nMsg] = '\0';
+        offset = 1;
+    }
+
+    printf("Got image.\n");
+    printf("nMsg: /%d/ offset:/%ld/\n", nMsg, offset);
+    if (offset >= 2) printf("1/%c%c%c/\n", reply[offset-2], reply[offset-1], reply[offset]);
+    else printf("2/%c%c%c/\n\n", reply[offset], reply[offset+1], reply[offset+2]);
+
     // Get Number of Answers
-    sscanf(reply, " %d", &N);
-    offset += (3 + floor(log10(abs(N))));
+    //printf("|%.6s|\n", reply + offset);
+    sscanf(reply + offset, " %d", &N);
+    //printf("n answers = %d\n", N);
+    if (N > 0) offset += (2 + floor(log10(abs(N))));
+    else offset += 2;
 
     // Print question
     sprintf(path, "client/%s/%s.txt", topic, questionChosen);
@@ -804,37 +883,56 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     fclose(fp);
     free(path);
     free(question);
-    
+
+    printf("Got number of answers.\n");
+    printf("nMsg: /%d/ offset:/%ld/\n", nMsg, offset);
+    if (offset >= 2) printf("1/%c%c%c/\n", reply[offset-2], reply[offset-1], reply[offset]);
+    else printf("2/%c%c%c/\n", reply[offset], reply[offset+1], reply[offset+2]);
+  
     // Check answers
     AN = (char*) malloc(3); 
     for (int i = 0; i < N; i++) {
-        // Parse relevant answer info
-        int userId = 0;
-        sscanf(reply + offset, "%s %d %d", AN, &userId ,&asize);
+        sscanf(reply + offset, "%s %d %ld", AN, &userId ,&asize);
+
         pathLen = strlen("client/") + strlen(topic) + strlen("/") + strlen(questionChosen) + strlen("_") + strlen(AN) + strlen(".txt") + 1;
         path = (char*) malloc(pathLen);
         sprintf(path, "client/%s/%s_%s.txt", topic, questionChosen, AN);
         offset += 2 + 1 + 5 + 1 + floor(log10(abs(asize))) + 1 + 1;
-        if (recvTCPWriteFile(fd, path, &reply, BUFFER_SIZE, &offset, asize) == -1) printf("Erro ao escrever o ficheiro da pergunta.\n");
+        if (recvTCPWriteFile(fd, path, &reply, &nMsg, BUFFER_SIZE, &offset, asize) == -1) printf("Erro ao escrever o ficheiro da pergunta.\n");
         if (offset == 0) offset++;
+
+        if (offset != 0 && offset >= nMsg) {
+            while ( (nMsg = read(fd, reply, BUFFER_SIZE))<= 0 );
+            offset = 1;
+        }
+
+        printf("Got 1 answer.\n");
+        printf("nMsg: /%d/ offset:/%ld/\n", nMsg, offset);
+        if (offset >= 2) printf("1/%c%c%c/\n", reply[offset-2], reply[offset-1], reply[offset]);
+        else printf("2/%c%c%c/\n", reply[offset], reply[offset+1], reply[offset+2]);
 
         sscanf(reply + offset, "%d", &aIMG);
         offset += 2;
 
         if (aIMG) {
-            sscanf(reply + offset, "%s %d", aiext, &aisize);
+            sscanf(reply + offset, "%s %ld", aiext, &aisize);
             sprintf(path, "client/%s/%s_%s.%s", topic, questionChosen, AN, aiext);
             offset += 3 + strlen(aiext) + floor(log10(abs(aisize)));
-            if (recvTCPWriteFile(fd, path, &reply, BUFFER_SIZE, &offset, aisize) == -1) printf("Erro ao escrever o ficheiro da pergunta.\n");
+            if (recvTCPWriteFile(fd, path, &reply, &nMsg, BUFFER_SIZE, &offset, aisize) == -1) printf("Erro ao escrever o ficheiro da pergunta.\n");
             offset += 1;
         }
 
         else {
-            if (offset != 0 && offset >= nMsg) {
-                nMsg = read(fd, reply, BUFFER_SIZE);
+            if (offset != 0 && offset >= nMsg && (i+1) < N) {
+                while ( (nMsg = read(fd, reply, BUFFER_SIZE))<= 0 ) printf("hey\n");
                 offset = 1;
             }
         }
+
+        printf("Got answer's image or not.\n");
+        printf("nMsg: /%d/ offset:/%ld/\n", nMsg, offset);
+        if (offset >= 2) printf("1/%c%c%c%c/\n", reply[offset-2], reply[offset-1], reply[offset], reply[offset+1]);
+        else printf("2/%c%c%c/\n", reply[offset], reply[offset+1], reply[offset+2]);
 
         free(path);
     }
