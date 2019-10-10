@@ -1,12 +1,6 @@
 reg 12345
 tl
-ts 1
+ts 4
 ql
-qg 1
-qg 1
-qg 1
-qg 1
-qg 1
-qg 1
+qg 4
 exit
-
