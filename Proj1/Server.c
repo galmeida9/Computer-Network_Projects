@@ -123,6 +123,13 @@ int main(int argc, char** argv) {
         exit(EXIT_FAILURE);
     }
 
+    // Setting TCP socket timeout value    
+    if(setsockopt(fdTCP, SOL_SOCKET, SO_RCVTIMEO,(struct timeval *)&tv,sizeof(struct timeval))) {
+        printf("setsockopt TCP failed\n");
+        close(fdTCP);
+        exit(2);
+    }
+
     nTCP = bind(fdTCP, resTCP->ai_addr, resTCP->ai_addrlen);
     if (nTCP == -1) exit(EXIT_FAILURE);
 
