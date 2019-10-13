@@ -1,57 +1,55 @@
-#include <stdio.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
-#include <netdb.h>
-#include <string.h>
 #include <assert.h>
-#include <math.h>
-#include <sys/stat.h>
-#include <signal.h>
 #include <errno.h>
+#include <math.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
-#define  DEFAULT_PORT "58013"
 #define BUFFER_SIZE 2048
+#define DEFAULT_PORT "58013"
 #define ID_SIZE 5
-#define REGISTER_SIZE 12
-#define NUM_TOPICS 99
-#define NUM_QUESTIONS 99
-#define LEN_TOPIC 10
 #define LEN_COMMAND 3
+#define LEN_TOPIC 10
+#define NUM_QUESTIONS 99
+#define NUM_TOPICS 99
+#define REGISTER_SIZE 12
 
-void parseArgs(int number, char** arguments, char **port, char **ip);
+void parseArgs(int number, char **arguments, char **port, char **ip);
 void connectToServer(int *udp_fd, int *tcp_fd, char *ip, char *port, struct addrinfo hints, struct addrinfo **resUDP, struct addrinfo **resTCP);
 void SendMessageUDP(char *message, int fd, struct addrinfo *res);
 char* receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr);
 void SendMessageTCP(char *message, int *fd, struct addrinfo **res);
 char* receiveMessageTCP(int fd);
-int recvTCPWriteFile(int fd, char* filePath, char** bufferAux, int *sizeMsg, int bufferSize, long* offset, int size);
+int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int *sizeMsg, int bufferSize, long *offset, int size);
 void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP, struct addrinfo *resTCP, socklen_t addrlen, struct sockaddr_in addr);
 int registerNewUser(int id, int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr);
-void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char** topics, int* numTopics);
-void freeTopics(int numTopics, char** topics);
-char* topicSelectNum(int numTopics, char** topics, int topicChosen);
-char* topicSelectName(int numTopics, char** topics, char* name);
-int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char* topicChosen, char** questions);
-void freeQuestions(int numQuestions, char** questions);
-void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen, char* questionChosen, char *text_file, char *img_file);
-char * questionSelectNum(int question, int num_questions, char ** questions);
-void questionGet(char * topic, char * questionChosen, int fd);
-char * questionSelectName(char * name, int num_questions, char ** questions);
-void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChosen, char* question, char* text_file, char* img_file);
+void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char **topics, int *numTopics);
+void freeTopics(int numTopics, char **topics);
+char* topicSelectNum(int numTopics, char **topics, int topicChosen);
+char* topicSelectName(int numTopics, char **topics, char *name);
+int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char *topicChosen, char **questions);
+void freeQuestions(int numQuestions, char **questions);
+void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen, char *questionChosen, char *text_file, char *img_file);
+char* questionSelectNum(int question, int num_questions, char **questions);
+void questionGet(char *topic, char *questionChosen, int fd);
+char* questionSelectName(char *name, int num_questions, char **questions);
+void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChosen, char *question, char *text_file, char *img_file);
 void handleTimeout(int sig);
 
-char *buffer;
 int debug = 0;
+char *buffer;
 
-
-int main(int argc, char** argv) {
-    int *udp_fd = malloc(sizeof(int));
-    int *tcp_fd = malloc(sizeof(int));
-    char* ip, *port;
+int main(int argc, char **argv) {
+    int *udp_fd = malloc(sizeof(int)), *tcp_fd = malloc(sizeof(int));
+    char *ip, *port;
     ssize_t n;
     socklen_t addrlen;
     struct addrinfo hints, *resUDP, *resTCP;
@@ -82,27 +80,27 @@ int main(int argc, char** argv) {
 }
 
 void parseArgs(int number, char** arguments, char **port, char **ip) {
-    int opt; 
-       
-    while((opt = getopt(number, arguments, "n:p:d")) != -1) {  
-        switch(opt) {   
-            case 'n':  
+    int opt;
+
+    while((opt = getopt(number, arguments, "n:p:d")) != -1) {
+        switch(opt) {
+            case 'n':
                 if (optarg == NULL || strcmp(optarg, "-p") == 0) {
                     printf("The IP is missing.\n");
                     exit(1);
                 }
                 *ip = strdup(optarg);
-                break;  
-            case 'p':  
+                break;
+            case 'p':
                 if (optarg == NULL || strcmp(optarg, "-n") == 0) {
                     printf("The port is missing.\n");
                     exit(1);
                 }
                 *port = strdup(optarg);
-                break;  
+                break;
             case 'd':
                 debug = 1;
-        }  
+        }
     }
 }
 
@@ -146,7 +144,7 @@ void SendMessageUDP(char *message, int fd, struct addrinfo *res) {
 }
 
 char* receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr) {
-    ssize_t n;  
+    ssize_t n;
     addrlen = sizeof(addr);
     buffer[0] = '\0';
 
@@ -177,7 +175,7 @@ void SendMessageTCP(char *message, int *fd, struct addrinfo **res) {
         close(*fd);
         exit(2);
     }
-    
+
     n = connect(*fd, (*res)->ai_addr, (*res)->ai_addrlen);
     if (n == -1) exit(1);
 
@@ -186,7 +184,7 @@ void SendMessageTCP(char *message, int *fd, struct addrinfo **res) {
 }
 
 char* receiveMessageTCP(int fd) {
-    ssize_t n;  
+    ssize_t n;
     //memset(buffer, 0, BUFFER_SIZE);
     buffer[0] = '\0';
 
@@ -196,7 +194,7 @@ char* receiveMessageTCP(int fd) {
             exit(1);
         printf("server response timeout\n");
     }
-    
+
     if (debug == 1) printf("Received: |%s|\n", buffer);
     return buffer;
 }
@@ -208,7 +206,7 @@ int recvTCPWriteFile(int fd, char* filePath, char** bufferAux, int* sizeMsg, int
     if (fp == NULL) return -1;
 
     int toWrite = size;
-    
+
     if (toWrite <= (*sizeMsg - *offset)) {
         fwrite(*bufferAux+*offset, sizeof(char), toWrite, fp);
         printf("%s Copying file %d%%", filePath, toWrite / size * 100);
@@ -246,7 +244,7 @@ int recvTCPWriteFile(int fd, char* filePath, char** bufferAux, int* sizeMsg, int
         memset(buffer, 0, sizeof(buffer));
         *offset = 0;
     }
-    
+
     //Close file and return
     fclose(fp);
     memcpy(*bufferAux, buffer, nMsg);
@@ -314,7 +312,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
 
         }
 
-        else if (!strcmp(command, "tp") || !strcmp(command, "topic_propose")) {            
+        else if (!strcmp(command, "tp") || !strcmp(command, "topic_propose")) {
             sprintf(msg, "PTP %d %s\n", *userId, strtok(NULL, " "));
             SendMessageUDP(msg, udp_fd, resUDP);
             status = receiveMessageUDP(udp_fd, addrlen, addr);
@@ -413,7 +411,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
         }
 
         else *userId <= 0 ? printf("You need to register first before performing any commands.\n") : printf("Invalid command.\n");
-        
+
         printf("\n");
     }
 }
@@ -489,12 +487,12 @@ char* topicSelectName(int numTopics, char** topics, char* name){
     char* topic = NULL;
     char* userId = NULL;
     int i;
-    
+
     if (numTopics == -1){
         printf("Run tl first.\n");
         return NULL;
     }
-    
+
     for (i = 0; i < numTopics; i++){
         char *topicInfo = strdup(topics[i]);
         char *nextTopic = strdup(strtok(topicInfo, ":"));
@@ -521,7 +519,7 @@ int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sock
     snprintf(message, lenMsg, "LQU %s\n", topicChosen);
     SendMessageUDP(message, fd, res);
     free(message);
-    
+
     questionList = receiveMessageUDP(fd, addrlen, addr);
     response = strdup(questionList);
 
@@ -530,7 +528,7 @@ int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sock
         free(response);
         return -1;
     }
-        
+
     numQuestions = atoi(strtok(NULL, " \n"));
     if (!numQuestions) {
         printf("no available questions about %s\n", topicChosen);
@@ -540,7 +538,7 @@ int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sock
     printf("available questions about %s:\n", topicChosen);
     while (iter = strtok(NULL, " \n"))
         questions[i++] = strdup(iter);
-    
+
     for (i = 0; i < numQuestions; i++) {
         questions[i] = strtok(questions[i], ":");
         printf("%d - %s\n", i + 1, questions[i]);
@@ -564,7 +562,7 @@ void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChos
 
     if (strlen(text_file) == 0) return;
 
-    /*Get the question and its size*/    
+    /*Get the question and its size*/
     char *qdata;
     long qsize;
     FILE *questionFd;
@@ -639,16 +637,16 @@ void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChos
         //Send image data
         aidata = (char*) malloc(sizeof(char) * BUFFER_SIZE);
         int sizeAux = aisize;
-        
+
         while (sizeAux > 0){
             int nRead = fread(aidata, 1 , BUFFER_SIZE,imageFd);
             write(*fd, aidata, nRead);
             sizeAux = sizeAux - BUFFER_SIZE;
         }
-        
+
         write(*fd, "\n", strlen("\n"));
 
-        fclose(imageFd);        
+        fclose(imageFd);
         free(aidata);
     }
 
@@ -656,7 +654,7 @@ void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChos
         snprintf(response, BUFFER_SIZE,  " 0\n");
         write(*fd, " 0\n", strlen(" 0\n"));
     }
-    
+
     free(response);
 
     char* reply = receiveMessageTCP(*fd);
@@ -730,7 +728,7 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
         }
 
         write(fd, "\n", strlen("\n"));
-    
+
         fclose(imgFd);
         free(idata);
 
@@ -807,7 +805,7 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     pathLen = strlen("client/") + strlen(topic) + strlen("/") + strlen(questionChosen) + strlen(".txt") + 1;
     path = (char*) malloc(pathLen);
     sprintf(path, "client/%s/%s.txt", topic, questionChosen);
-    
+
     dirLen = strlen("client/") + strlen(topic) + 1;
     directory = (char*) malloc(dirLen);
     sprintf(directory, "client/%s", topic);
@@ -832,7 +830,7 @@ void questionGet(char *topic, char *questionChosen, int fd) {
 
     if (recvTCPWriteFile(fd, path, &reply, &nMsg, BUFFER_SIZE, &offset, qsize) == -1) printf("Erro ao escrever o ficheiro da pergunta.\n");
     if (offset == 0) offset++;
-    
+
     if (offset != 0 && offset >= nMsg) {
         while ( (nMsg = read(fd, reply, BUFFER_SIZE))<= 0 );
         //reply[nMsg] = '\0';
@@ -843,7 +841,7 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     printf("nMsg: /%d/ offset:/%ld/\n", nMsg, offset);
     if (offset >= 2) printf("1/%c%c%c/\n", reply[offset-2], reply[offset-1], reply[offset]);
     else printf("2/%c%c%c/\n\n", reply[offset], reply[offset+1], reply[offset+2]);
-    
+
     sscanf(reply + offset, "%d", &qIMG);
     offset += 2;
 
@@ -895,9 +893,9 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     printf("nMsg: /%d/ offset:/%ld/\n", nMsg, offset);
     if (offset >= 2) printf("1/%c%c%c/\n", reply[offset-2], reply[offset-1], reply[offset]);
     else printf("2/%c%c%c/\n", reply[offset], reply[offset+1], reply[offset+2]);
-  
+
     // Check answers
-    AN = (char*) malloc(3); 
+    AN = (char*) malloc(3);
     for (int i = 0; i < N; i++) {
         sscanf(reply + offset, "%s %d %ld", AN, &userId ,&asize);
 
@@ -923,7 +921,7 @@ void questionGet(char *topic, char *questionChosen, int fd) {
 
         if (aIMG) {
             sscanf(reply + offset, "%s %ld", aiext, &aisize);
-            printf("IMAGE SIZE: %d\n", aisize);
+            printf("IMAGE SIZE: %ld\n", aisize);
             sprintf(path, "client/%s/%s_%s.%s", topic, questionChosen, AN, aiext);
             offset += 3 + strlen(aiext) + floor(log10(abs(aisize)));
             if (recvTCPWriteFile(fd, path, &reply, &nMsg, BUFFER_SIZE, &offset, aisize) == -1) printf("Erro ao escrever o ficheiro da pergunta.\n");
