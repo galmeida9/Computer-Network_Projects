@@ -872,11 +872,6 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     if (N > 0) offset += (2 + floor(log10(abs(N))));
     else offset += 2;
 
-    if (offset != 0 && offset >= nMsg) {
-        while ( (nMsg = read(fd, reply, BUFFER_SIZE))<= 0 );
-        offset = 1;
-    }
-
     // Print question
     sprintf(path, "client/%s/%s.txt", topic, questionChosen);
     FILE * fp = fopen(path, "r");
