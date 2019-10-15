@@ -25,14 +25,11 @@
 #define TOPIC_LIST "topics/List_of_Topics.txt"
 #define TOPICNAME_SIZE 10
 
-int nUDP, nTCP, fdUDP, fdTCP, newfd;
+int nUDP, nTCP, fdUDP, fdTCP, newfd, numberOfTopics = 0;
+char buffer[BUFFER_SIZE], **listWithTopics;
 socklen_t addrlenUDP, addrlenTCP;
 struct addrinfo hintsUDP, hintsTCP, *resUDP, *resTCP;
 struct sockaddr_in addrUDP, addrTCP;
-
-char buffer[BUFFER_SIZE];
-int numberOfTopics = 0;
-char **listWithTopics;
 
 void waitRequest();
 void handleKill(int sig);
@@ -54,7 +51,7 @@ char* listOfQuestions(char *topic);
 char* submitAnswer(char *input, int sizeInput, int fd);
 char* questionSubmit(char *input, int fd);
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
     int opt;
     char port[6];
     struct sigaction handle_kill;
