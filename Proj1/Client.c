@@ -818,7 +818,6 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     // Write text file
     if (offset >= nMsg) {
         while ( (nMsg = read(fd, reply, BUFFER_SIZE))<= 0 );
-        //reply[nMsg] = '\0';
         offset = 0;
     }
 
@@ -833,7 +832,6 @@ void questionGet(char *topic, char *questionChosen, int fd) {
 
     if (offset != 0 && offset >= nMsg) {
         while ( (nMsg = read(fd, reply, BUFFER_SIZE))<= 0 );
-        //reply[nMsg] = '\0';
         offset = 1;
     }
 
@@ -921,11 +919,11 @@ void questionGet(char *topic, char *questionChosen, int fd) {
 
         if (aIMG) {
             sscanf(reply + offset, "%s %ld", aiext, &aisize);
-            printf("IMAGE SIZE: %ld\n", aisize);
+            printf("IMAGE SIZE: %ld\nEXT: %s\n", aisize, aiext);
             sprintf(path, "client/%s/%s_%s.%s", topic, questionChosen, AN, aiext);
             offset += 3 + strlen(aiext) + floor(log10(abs(aisize)));
             if (recvTCPWriteFile(fd, path, &reply, &nMsg, BUFFER_SIZE, &offset, aisize) == -1) printf("Erro ao escrever o ficheiro da pergunta.\n");
-            offset += 1;
+            if (offset == 0) offset++;
         }
 
         else {
