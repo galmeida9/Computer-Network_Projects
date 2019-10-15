@@ -14,7 +14,13 @@
 #include <string.h>
 #include <unistd.h>
 
+#define BUFFER_SIZE 2048
+#define ID_SIZE 5
+
+#define DEBUG_PRINT(fmt, args...) \
+    do { if (DEBUG_TEST) fprintf(stderr, fmt, ##args); } while (0)
+
 int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int *sizeMsg,
-    int bufferSize, long *offset, int size);
+    int bufferSize, int *offset, int size, int DEBUG_TEST);
 
 #endif /* UTILITY_H */

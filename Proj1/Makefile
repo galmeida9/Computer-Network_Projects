@@ -1,23 +1,23 @@
-SOURCES = Client.c Server.c lib/utility.c
+SOURCES = Server.c Client.c lib/utility.c
 OBJS = $(SOURCES:%.c=%.o)
 CC   = gcc
-CFLAGS =-g -ansi -Wall
+CFLAGS = -g
 LDFLAGS = -lm
 
 all: user FS
 
 FS: Server.o
-	$(CC) -g Server.c -o FS $(LDFLAGS)
+	$(CC) $(CFLAGS) $^ -o FS $(LDFLAGS)
 
 user: Client.o lib/utility.o
-	$(CC) -g $^ -o user $(LDFLAGS)
+	$(CC) $(CFLAGS) $^ -o user $(LDFLAGS)
 
 Server.o: Server.c
 Client.o: Client.c lib/utility.h
 lib/utility.o: lib/utility.c lib/utility.h
 
-Client.o lib/utility.o:
-	$(CC) -g -c -o $@ $<
+$(OBJS):
+	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
 	@echo Cleaning...
