@@ -16,9 +16,6 @@ Server.o: Server.c
 Client.o: Client.c lib/utility.h
 lib/utility.o: lib/utility.c lib/utility.h
 
-$(OBJS):
-	$(CC) $(CFLAGS) -c -o $@ $<
-
 clean:
 	@echo Cleaning...
 	rm -f $(OBJS) user FS
