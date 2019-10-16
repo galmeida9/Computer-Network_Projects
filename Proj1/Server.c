@@ -469,7 +469,7 @@ void freeTopicInList() {
 }
 
 char* questionSubmit(char *input, int fd) {
-	int pathLen, qUserId, found, NQ = 0;
+	int nMsg, pathLen, qUserId, found, NQ = 0;
 	int qsize = 0, offset = 0, qIMG = 0, isize = 0;
 	char *topic, *question, *line = NULL, *response, *questionAux, *path, *iext;
 	size_t len;
