@@ -7,7 +7,7 @@ LDFLAGS = -lm
 
 all: user FS
 
-FS: Server.o
+FS: Server.o lib/utility.o
 	$(CC) $(CFLAGS) $^ -o FS $(LDFLAGS)
 
 user: Client.o lib/utility.o
