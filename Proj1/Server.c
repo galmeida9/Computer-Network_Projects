@@ -39,8 +39,8 @@ struct addrinfo hintsUDP, hintsTCP, *resUDP, *resTCP;
 struct sockaddr_in addrUDP, addrTCP;
 
 void waitRequest();
-void handleKill(int sig);
-char* processUDPMessage(char *buffer, int len);
+void handleKill();
+char* processUDPMessage(char *buffer);
 char* processTCPMessage(char *buffer, int len, int fd);
 int checkIfStudentCanRegister(int number);
 char* registerNewStudent(char *arg1);
@@ -54,7 +54,7 @@ char* questionGet(char *input, int fd);
 void questionGetReadFiles(char *path, char *question, int qUserId, int numberOfAnswers, int qIMG, char *qixt, int fd);
 void getAnswerInformation(char *path, char *question, char *numb, int fd);
 char* listOfQuestions(char *topic);
-char* submitAnswer(char *input, int sizeInput, int fd);
+char* submitAnswer(char *input, int fd);
 char* questionSubmit(char *input, int fd);
 int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int bufferSize, int *offset, int size);
 
@@ -167,14 +167,14 @@ void waitRequest() {
         else {
             if (FD_ISSET(fdUDP, &readset)){
                 printf("\n[UDP] ");
-                int addrlen = sizeof(addrUDP);
+                socklen_t addrlen = sizeof(addrUDP);
                 char *bufferUDP = malloc(sizeof(char) * BUFFER_SIZE);
 
                 nMsg = recvfrom(fdUDP, bufferUDP, BUFFER_SIZE, 0, (struct sockaddr*) &addrUDP, &addrlen);
                 if (nMsg == -1) /*error*/ exit(EXIT_FAILURE);
 
                 /*Analyze message*/
-                char *response = processUDPMessage(strtok(bufferUDP, "\n"), BUFFER_SIZE);
+                char *response = processUDPMessage(strtok(bufferUDP, "\n"));
 
                 /*Send response*/
                 nMsg = sendto(fdUDP, response, strlen(response), 0, (struct sockaddr*) &addrUDP, addrlen);
@@ -212,7 +212,7 @@ void waitRequest() {
     close(fdTCP);
 }
 
-void handleKill(int sig) {
+void handleKill() {
     freeaddrinfo(resUDP);
     freeaddrinfo(resTCP);
     close(fdUDP);
@@ -225,11 +225,9 @@ void handleKill(int sig) {
 /**
 UDP message handling
 - parameter buffer: buffer containing the request
-- parameter len: buffer length
 */
-char* processUDPMessage(char *buffer, int len) {
+char* processUDPMessage(char *buffer) {
     char *command, *response, *bufferBackup;
-    size_t size;
 
     bufferBackup = strdup(buffer);
     command = strtok(buffer, " ");
@@ -281,7 +279,6 @@ TCP message handling
 */
 char* processTCPMessage(char *buffer, int len, int fd) {
     char *command, *response, *bufferBackup;
-    size_t size;
 
     bufferBackup = (char*) malloc(sizeof(char) * (BUFFER_SIZE + 1));
     memcpy(bufferBackup, buffer, len);
@@ -296,7 +293,7 @@ char* processTCPMessage(char *buffer, int len, int fd) {
         response = questionSubmit(bufferBackup, fd);
 
     else if (!strcmp(command, "ANS"))
-        response = submitAnswer(bufferBackup, len, fd);
+        response = submitAnswer(bufferBackup, fd);
 
     else {
         printf("Command not found.\n");
@@ -330,7 +327,6 @@ int checkIfStudentCanRegister(int number) {
 
 char* registerNewStudent(char *arg1) {
     int stuNumber = atoi(arg1);
-    char *response;
 
     if (stuNumber == 0) {
         printf("Number error.\n");
@@ -398,7 +394,7 @@ char* listOfTopics() {
 // TODO check response
 char* topicPropose(char *input) {
     int pathLen;
-    char *id, *topic, *response, *directory, *questionPath;
+    char *id, *topic, *directory, *questionPath;
     FILE *topicFd;
 
     strtok(input, " "); id = strtok(NULL, " "); topic = strtok(NULL, " ");
@@ -569,8 +565,8 @@ char* questionSubmit(char *input, int fd) {
 
 char* questionGet(char *input, int fd) {
     int qUserId, numberOfAnswers, qIMG = 0, foundQuestion = 0;
-    char *response, *topic, *question, *path, *topicFolderPath, *qiext = NULL;
-    char *token, *line = NULL;
+    char *topic, *question, *path, *topicFolderPath, *qiext = NULL;
+    char *line = NULL;
     size_t len = 0;
     ssize_t nread;
     FILE *questionsFd;
@@ -625,8 +621,6 @@ void questionGetReadFiles(char* path, char* question, int qUserId,
     int numberOfAnswers, int qIMG, char *qiext, int fd) {
     int sizeAux, nRead;
     char *questionPath, *response, *qdata;
-    size_t len = 0;
-    ssize_t nread;
     FILE *questionFd;
 
     /* Path for the requested question */
@@ -831,10 +825,10 @@ char* listOfQuestions(char *topic) {
     return response;
 }
 
-char* submitAnswer(char* input, int sizeInput, int fd) {
+char* submitAnswer(char* input, int fd) {
     int offset, asizeInt;
-    char *userID, *topic, *question, *asize, *inputAux, *aIMG;
-    char *iext = NULL, *isize = NULL, *idata = NULL, *dup_input;
+    char *userID, *topic, *question, *asize, *aIMG;
+    char *iext = NULL, *isize = NULL, *dup_input;
 
     dup_input = strdup(input);
 
@@ -859,8 +853,8 @@ char* submitAnswer(char* input, int sizeInput, int fd) {
     }
 
     /* Check if question exists */
-    int lenQuestionPath, numOfAnswers = -1, nMsg = 0;
-    long questionListOffset = 0, lineSize = 0;
+    int lenQuestionPath, numOfAnswers = -1;
+    long questionListOffset = 0;
     char *qUserCreated, *qImg, *qExt, *line = NULL, *numOfAnswersInput = NULL;
     char *questionPath, *questionAux, * response;
     size_t len = 0;
@@ -887,7 +881,6 @@ char* submitAnswer(char* input, int sizeInput, int fd) {
             qImg = strtok(NULL, ":");
             qExt = strtok(NULL, ":");
             numOfAnswers = atoi(numOfAnswersInput);
-            lineSize = ftell(questionListFP);
             break;
         }
         questionListOffset = ftell(questionListFP);
@@ -1048,7 +1041,7 @@ int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int bufferSize,
             *offset = 0;
             break;
         }
-        memset(buffer, 0, sizeof(buffer));
+        memset(buffer, 0, sizeof(*buffer));
         *offset = 0;
     }
     DEBUG_PRINT("\n");
