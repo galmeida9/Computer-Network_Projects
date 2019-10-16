@@ -841,6 +841,7 @@ void questionGet(char *topic, char *questionChosen, int fd) {
 
     /* Get Number of Answers */
     sscanf(reply + offset, " %d", &N);
+    DEBUG_PRINT("[ANS] Preparing to receive %d answers.\n", N);
 
     if (N > 0) offset += (2 + floor(log10(abs(N))));
     else offset += 2;
@@ -857,6 +858,7 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     free(path);
     free(question);
 
+    /* Answers section */
     AN = (char*) malloc(3);
     for (int i = 0; i < N; i++) {
         sscanf(reply + offset, "%s %d %ld", AN, &userId ,&asize);
