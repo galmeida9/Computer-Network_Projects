@@ -71,3 +71,7 @@ int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int *sizeMsg,
     free(buffer);
     return 0;
 }
+
+int lengthInt(int x){
+    return floor(log10(abs(x))) + 1;
+}
