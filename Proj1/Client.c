@@ -544,7 +544,7 @@ void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChos
 
     //Send information
     int response_len = 3 + 1 + 5 + 1 + strlen(topicChosen) + 1 + strlen(question) + 1 + floor(log10(abs(qsize))) + 3;
-    char *response = calloc(response_len, sizeof(char));
+    char *response = malloc(sizeof(char) * response_len);
     snprintf(response, BUFFER_SIZE, "QUS %d %s %s %ld ", aUserID, topicChosen, question, qsize);
     SendMessageTCP(response, fd, res);
 
@@ -644,6 +644,25 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
     char *message;
     int aIMG = 0;
     long isize = 0;
+
+    /* Send information */
+    int response_len = 3 + 1 + 5 + 1 + strlen(topicChosen) + 1 + strlen(questionChosen) + 1 + floor(log10(abs(asize))) + 3;
+    char *response = malloc(sizeof(char) * response_len);
+    snprintf(response, BUFFER_SIZE + asize + isize, "ANS %d %s %s %ld ", 
+        aUserID, topicChosen, questionChosen, asize);
+    SendMessageTCP(response, &fd, res);
+
+    /* Send file data */
+    char *idata = (char*) malloc(sizeof(char) * BUFFER_SIZE);
+    int sizeAux = isize;
+
+    while (sizeAux > 0) {
+        int nRead = fread(idata, 1, BUFFER_SIZE, answerFd);
+        DEBUG_PRINT("[ANS] Sending partial of %s", idata);
+        write(fd, idata, nRead);
+        sizeAux = sizeAux - BUFFER_SIZE;
+    }
+
     if (img_file != NULL) {
         aIMG = 1;
         len = 0;
@@ -691,18 +710,15 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
             write(fd, idata, nRead);
             sizeAux = sizeAux - BUFFER_SIZE;
         }
-
         write(fd, "\n", strlen("\n"));
 
         fclose(imgFd);
         free(idata);
 
     }
-
     else {
-        message = calloc(BUFFER_SIZE + asize, sizeof(char));
-        snprintf(message, BUFFER_SIZE + asize + isize, "ANS %d %s %s %ld %s %d\n", aUserID, topicChosen, questionChosen, asize, adata, aIMG);
-        SendMessageTCP(message, &fd, res);
+        snprintf(response, BUFFER_SIZE,  " 0\n");
+        write(fd, " 0\n", strlen(" 0\n"));
     }
 
     //Parse reply
