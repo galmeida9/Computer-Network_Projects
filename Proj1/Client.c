@@ -660,11 +660,10 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
     
     sprintf(answerPath, "%s.txt", text_file);
     DEBUG_PRINT("[ANS] Destiny file path: %s\n", answerPath);
-    
-    answerFd = fopen(answerPath, "r");
-    free(answerPath);
-    if (answerFd == NULL) {
+   
+    if (!(answerFd = fopen(answerPath, "r"))) {
         printf("[Error] Can't find the specified answer file.\n");
+        free(answerPath);
         return;
     }
 
@@ -694,6 +693,7 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
         sizeAux -= BUFFER_SIZE;
     }
 
+    free(answerPath);
     fclose(answerFd);
 
     if (img_file != NULL) {
