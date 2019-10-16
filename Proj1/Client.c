@@ -172,7 +172,7 @@ char *receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr) {
         }
     }
 
-    DEBUG_PRINT("[UDP] Received: |%s|\n", buffer);
+    /* DEBUG_PRINT("[UDP] Received: |%s|\n", buffer); */
     return buffer;
 }
 
@@ -208,7 +208,7 @@ char* receiveMessageTCP(int fd) {
         printf("[Info] The operation has timed out.\n");
     }
 
-    DEBUG_PRINT("[TCP] Received: |%s|\n", buffer);
+    /* DEBUG_PRINT("[TCP] Received: |%s|\n", buffer); */
     return buffer;
 }
 
@@ -400,9 +400,7 @@ void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr
     SendMessageUDP("LTP\n", fd, res);
     ltr = receiveMessageUDP(fd, addrlen, addr);
 
-    DEBUG_PRINT("[LTP] Received response: \"%s\"\n", ltr);
-
-    if (!strcmp(ltr, "\0") || !strcmp(strtok(ltr, " "), "LTR")) {
+    if (!strcmp(ltr, "\0") || strcmp(strtok(ltr, " "), "LTR")) {
         printf("[Error] Failed to process your request.\n");
     }
 
@@ -428,9 +426,9 @@ void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr
     *numTopics = N;
 }
 
-void freeTopics(int numTopics, char** topics){
-    int i;
-    for (i=0; i<numTopics; i++) free(topics[i]);
+void freeTopics(int numTopics, char **topics) {
+    for (int i = 0; i < numTopics; i++)
+        free(topics[i]);
     free(topics);
 }
 
@@ -639,9 +637,8 @@ void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChos
     close(*fd);
 }
 
-
 void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen, char* questionChosen, char *text_file, char *img_file) {
-    FILE *answerFd;
+    FILE *answerFd, *imageFd;
     char *answerPath = malloc(strlen(text_file) + strlen(".txt") + 1);
     
     sprintf(answerPath, "%s.txt", text_file);
@@ -657,8 +654,9 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
     long asize = ftell(answerFd);
     fseek(answerFd, 0L, SEEK_SET);
 
-    char *message = malloc(sizeof(char) * (BUFFER_SIZE));
-    snprintf(message, BUFFER_SIZE, "ANS %d %s %s %ld ", aUserID, topicChosen, questionChosen, asize);
+    char *message = malloc(sizeof(char) * BUFFER_SIZE);
+    snprintf(message, BUFFER_SIZE, "ANS %d %s %s %ld ", 
+        aUserID, topicChosen, questionChosen, asize);
     SendMessageTCP(message, &fd, res);
 
     DEBUG_PRINT("[ANS] Answer properties:\n");
@@ -667,10 +665,11 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
     DEBUG_PRINT("      - Question chosen: \"%s\"\n", questionChosen);
     DEBUG_PRINT("      - Answer size: \"%ld\"\n", asize);
 
-    char *adata = (char*) malloc(sizeof(char)*BUFFER_SIZE);
-    int sizeAux = asize;
-    int nRead;
-    while (sizeAux > 0 ) {
+    int nRead, sizeAux = asize;
+    long isize = 0;
+    char *iext, *idata, *adata = (char*) malloc(sizeof(char) * BUFFER_SIZE);
+
+    while (sizeAux > 0) {
         nRead = fread(adata, 1 , BUFFER_SIZE, answerFd);
         write(fd, adata, nRead);
         sizeAux -= BUFFER_SIZE;
@@ -679,52 +678,52 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
     fclose(answerFd);
     free(answerPath);
 
-    int aIMG = 0;
-    long isize = 0;
-
     if (img_file != NULL) {
-        aIMG = 1;
-        FILE *imgFd;
-        imgFd = fopen(strtok(img_file, "\n"), "rb");
-
-        if (imgFd == NULL) {
-            printf("[ERROR] Can't find image file.\n");
+        if (!(imageFd = fopen(strtok(img_file, "\n"), "rb"))) {
+            printf("Can't find image file.\n");
             free(adata);
             return;
         }
+
+        DEBUG_PRINT("[ANS] Image properties:\n");
+        
+        /* Get image size */
+        fseek(imageFd, 0L, SEEK_END);
+        isize = ftell(imageFd);
+        fseek(imageFd, 0L, SEEK_SET);
+        DEBUG_PRINT("      - Image size: \"%ld\"\n", isize);
 
         strtok(img_file, ".");
-        char *iext = strtok(NULL, ".");
-        if (strlen(iext) > 3) {
-            printf("[ERROR] Image extention has more than 3 bytes.\n");
-            free(adata);
-            return;
-        }
+        iext = strtok(NULL, ".");
+        DEBUG_PRINT("      - Image extention: \"%s\"\n", iext);
 
-        fseek(imgFd, 0L, SEEK_END);
-        isize = ftell(imgFd);
-        fseek(imgFd, 0L, SEEK_SET);
+        /* Send image information */
+        snprintf(adata, BUFFER_SIZE, " 1 %s %ld ", iext, isize);
+        //SendMessageTCP(adata, &fd, res);
+        write(fd, adata, strlen(adata));
+        /* Send image data */
+        sizeAux = isize;
+        idata = (char*) malloc(sizeof(char) * BUFFER_SIZE);
 
-        snprintf(message, BUFFER_SIZE, " %d %s %ld ", aIMG, iext, isize);
-        SendMessageTCP(message, &fd, res);
-
-        int sizeAux = isize;
-        char *idata = malloc(sizeof(char) * (BUFFER_SIZE));
-
-        while (sizeAux > 0){
-            int nRead = fread(idata, 1 , BUFFER_SIZE,imgFd);
+        DEBUG_PRINT("[ANS] Preparing to send image data.\n");
+        DEBUG_PRINT("[ANS] Writing image data (0%% completed)");
+        while (sizeAux > 0) {
+            nRead = fread(idata, 1, BUFFER_SIZE, imageFd);
             write(fd, idata, nRead);
-            sizeAux = sizeAux - BUFFER_SIZE;
-        }
+            sizeAux = sizeAux - nRead;
 
-        write(fd, "\n", strlen("\n"));
-        fclose(imgFd);
+            fflush(stdout);
+            DEBUG_PRINT("\r[ANS] Writing image data (%.0f%% completed).", 
+                (isize - sizeAux) * 1.0 / isize * 100);
+        }
+        
+        DEBUG_PRINT("\n");
+        write(fd, "\n", 1);
+        fclose(imageFd);
         free(idata);
     }
-
     else {
-        snprintf(message, BUFFER_SIZE + asize + isize, " %d\n", aIMG);
-        write(fd, message, strlen(message));
+        write(fd, " 0\n", 3);
     }
 
     DEBUG_PRINT("[ANS] Finished sending files.\n");
