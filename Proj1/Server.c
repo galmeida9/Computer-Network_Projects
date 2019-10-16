@@ -1,3 +1,5 @@
+//TODO remove server exclusive recvTCP and use lib's
+
 #include <arpa/inet.h>
 #include <math.h>
 #include <netdb.h>
@@ -25,6 +27,10 @@
 #define TOPIC_FOLDER "topics/"
 #define TOPIC_LIST "topics/List_of_Topics.txt"
 #define TOPICNAME_SIZE 10
+#define DEBUG_TEST 0
+
+#define DEBUG_PRINT(fmt, args...) \
+    do { if (DEBUG_TEST) fprintf(stderr, fmt, ##args); } while (0)
 
 int nUDP, nTCP, fdUDP, fdTCP, newfd, numberOfTopics = 0;
 char buffer[BUFFER_SIZE], **listWithTopics;
@@ -839,13 +845,11 @@ char* submitAnswer(char* input, int sizeInput, int fd) {
     userID = strdup(strtok(NULL, " ")); topic = strdup(strtok(NULL, " "));
     question = strdup(strtok(NULL, " ")); asize = strtok(NULL, " ");
 
-    // Trace Logs
-    printf("[ANS] Parsed argument userID: \"%s\"\n", userID);
-    printf("[ANS] Parsed argument topic: \"%s\"\n", topic);
-    printf("[ANS] Parsed argument question: \"%s\"\n", question);
-    printf("[ANS] Parsed argument asize: \"%s\"\n", asize);
+    DEBUG_PRINT("[ANS] Parsed argument userID: \"%s\"\n", userID);
+    DEBUG_PRINT("[ANS] Parsed argument topic: \"%s\"\n", topic);
+    DEBUG_PRINT("[ANS] Parsed argument question: \"%s\"\n", question);
+    DEBUG_PRINT("[ANS] Parsed argument asize: \"%s\"\n", asize);
 
-    //offset = 3 + 1 + strlen(userID) + 1 + strlen(topic) + 1 + strlen(question) + 1 + strlen(asize) + 1;
     asizeInt = atoi(asize);
 
     /* Check if topic exists */
@@ -914,16 +918,15 @@ char* submitAnswer(char* input, int sizeInput, int fd) {
     offset += strlen(question) + 1 + strlen(asize) + 1;
 
     /* Receive and write text file */
-    printf("[ANS] Parsed argument answerPath: \"%s\"\n", answerPath);
-    printf("[ANS] Parsed argument input: \"%s\"\n", input);
-    printf("[ANS] Parsed argument offset: \"%d\"\n", offset);
-    printf("[ANS] Parsed argument asizeInt: \"%d\"\n", asizeInt);
-    printf("[ANS] Writing answer to %s (size = %d)\n", answerPath, asizeInt);
+    DEBUG_PRINT("[ANS] Parsed argument answerPath: \"%s\"\n", answerPath);
+    DEBUG_PRINT("[ANS] Parsed argument input: \"%s\"\n", input);
+    DEBUG_PRINT("[ANS] Parsed argument offset: \"%d\"\n", offset);
+    DEBUG_PRINT("[ANS] Parsed argument asizeInt: \"%d\"\n", asizeInt);
+    DEBUG_PRINT("[ANS] Writing answer to %s (size = %d)\n", answerPath, asizeInt);
     
     if (recvTCPWriteFile(fd, answerPath, &input, BUFFER_SIZE, &offset, asizeInt) == -1)
         printf("erro\n");
-    free(answerPath);
-    printf("[ANS] Finished writing file.\n");
+    DEBUG_PRINT("[ANS] Finished writing file.\n");
 
     /* Check if input has argument of aIMG */
     if ((BUFFER_SIZE - offset) < 2){
@@ -991,39 +994,40 @@ char* submitAnswer(char* input, int sizeInput, int fd) {
     free(line);
 
     /* Output to screen */
-    printf("[ANS] New answer received: %s/%s\n", topic, question);
-    free(userID); free(topic); free(question);
+    printf("New answer (%s) received for %s/%s\n", answerPath, topic, question);
+    free(userID); free(topic); free(question);  free(answerPath);
     return strdup("ANR OK\n");
 }
 
 int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int bufferSize,
     int *offset, int size) {
+
     int sizeAux;
     float percentage = 0.0;
-    char *buffer = (char*) malloc(sizeof(char) * bufferSize);
+    char *buffer;
     ssize_t nMsg = 0;
     FILE *fp;
 
-    if (!(fp = fopen(filePath, "w"))) return -1;
+    if (!(fp = fopen(filePath, "wb"))) return -1;
+    buffer = (char*) malloc(sizeof(char) * bufferSize);
 
-    // Trace Logs
-    printf("[RCVTCP] Offset: \"%d\"\n", *offset);
-    printf("[RCVTCP] Size: \"%d\"\n", size);
+    DEBUG_PRINT("[RCVTCP] Offset: \"%d\"\n", *offset);
+    DEBUG_PRINT("[RCVTCP] Size: \"%d\"\n", size);
 
     int toWrite = size;
     if (toWrite <= (bufferSize - *offset)) {
         /* Case #1: data completely fit the buffer. */
         fwrite(*bufferAux + *offset, sizeof(char), toWrite, fp);
-        printf("[RCVTCP] Writing file to %s (%d%% complete)",
+        DEBUG_PRINT("Writing file to %s (%d%% complete)",
             filePath, toWrite / size * 100);
         *offset = *offset + toWrite + 1;
         toWrite = 0;
     }
-    else if (*offset < (bufferSize)) {
+    else if (*offset < bufferSize) {
         /* Case #2: the buffer didn't accommodate the full data,
          * -------  there's still data to be read. */
         fwrite(*bufferAux + *offset, sizeof(char), bufferSize - *offset, fp);
-        printf("[RCVTCP] Writing file to %s (%d%% complete)",
+        DEBUG_PRINT("Writing file to %s (%d%% complete)",
             filePath, (bufferSize - *offset) / size * 100);
         toWrite = toWrite - (bufferSize - *offset);
     }
@@ -1031,10 +1035,13 @@ int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int bufferSize,
     /* Receive the remaining portion of the data, if needed. */
     while (toWrite > 0 && (nMsg = read(fd, buffer, 1)) > 0) {
         fflush(stdout);
+        
         sizeAux = (toWrite > nMsg) ? nMsg : toWrite;
         fwrite(buffer, 1, sizeAux, fp);
         percentage = (size - toWrite) * 1.0 / size * 100;
-        printf("\r[RCVTCP] Writing file to %s (%.0f%% complete)", filePath, percentage);
+        
+        DEBUG_PRINT("\rWriting file to %s (%.0f%% complete)", filePath, percentage);
+        
         toWrite = toWrite - sizeAux;
         if (toWrite <= 0) {
             nMsg = read(fd, buffer, bufferSize);
@@ -1044,11 +1051,11 @@ int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int bufferSize,
         memset(buffer, 0, sizeof(buffer));
         *offset = 0;
     }
+    DEBUG_PRINT("\n");
 
     /* Close file and return */
     fclose(fp);
     memcpy(*bufferAux, buffer, nMsg);
     free(buffer);
-    printf("\n");
     return 0;
 }

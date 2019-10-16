@@ -1,3 +1,5 @@
+//TODO 703: re-calculate malloc size, its > than BUFFER_SIZE atm
+
 #include <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
@@ -163,7 +165,6 @@ char* receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr) {
     }
 
     DEBUG_PRINT("Received: |%s|\n", buffer);
-
     return buffer;
 }
 
@@ -622,8 +623,10 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
     ssize_t nread;
     FILE *answerFd;
     char *answerPath = malloc(strlen(text_file) + strlen(".txt") + 1);
+    
     sprintf(answerPath, "%s.txt", text_file);
-    printf("[ANS] Destiny file path: %s\n", answerPath);
+    DEBUG_PRINT("[ANS] Destiny file path: %s\n", answerPath);
+    
     answerFd = fopen(answerPath, "r");
     if (answerFd == NULL) {
         printf("[ERROR] Can't find answer file.\n");
@@ -664,16 +667,15 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
         fseek(imgFd, 0L, SEEK_END);
         isize = ftell(imgFd);
 
-        // Trace Logs
-        printf("[ANS] Answer properties:\n");
-        printf("\tUser ID: \"%d\"\n", aUserID);
-        printf("\tTopic chosen: \"%s\"\n", topicChosen);
-        printf("\tQuestion chosen: \"%s\"\n", questionChosen);
-        printf("\tasize: \"%ld\"\n", asize);
-        printf("\tadata: \"%s\"\n", adata);
-        printf("\taIMG: \"%d\"\n", aIMG);
-        printf("\taiext: \"%s\"\n", iext);
-        printf("\tisize: \"%ld\"\n", isize);
+        DEBUG_PRINT("[ANS] Answer properties:\n");
+        DEBUG_PRINT("\tUser ID: \"%d\"\n", aUserID);
+        DEBUG_PRINT("\tTopic chosen: \"%s\"\n", topicChosen);
+        DEBUG_PRINT("\tQuestion chosen: \"%s\"\n", questionChosen);
+        DEBUG_PRINT("\tasize: \"%ld\"\n", asize);
+        DEBUG_PRINT("\tadata: \"%s\"\n", adata);
+        DEBUG_PRINT("\taIMG: \"%d\"\n", aIMG);
+        DEBUG_PRINT("\taiext: \"%s\"\n", iext);
+        DEBUG_PRINT("\tisize: \"%ld\"\n", isize);
 
         message = malloc(sizeof(char) * (BUFFER_SIZE + asize));
         snprintf(message, BUFFER_SIZE + asize + isize, "ANS %d %s %s %ld %s %d %s %ld ", 
@@ -698,7 +700,7 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
     }
 
     else {
-        message = malloc(sizeof(char) * (BUFFER_SIZE + asize));
+        message = calloc(BUFFER_SIZE + asize, sizeof(char));
         snprintf(message, BUFFER_SIZE + asize + isize, "ANS %d %s %s %ld %s %d\n", aUserID, topicChosen, questionChosen, asize, adata, aIMG);
         SendMessageTCP(message, &fd, res);
     }
