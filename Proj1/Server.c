@@ -388,7 +388,6 @@ char* listOfTopics() {
     return finalResponse;
 }
 
-// TODO check response
 char* topicPropose(char *input) {
     int pathLen;
     char *id, *topic, *directory, *questionPath;
@@ -421,6 +420,8 @@ char* topicPropose(char *input) {
     if (!(topicFd = fopen(questionPath, "w"))) printf("Failed to create file for the new topic.\n");
     fclose(topicFd);
     free(questionPath);
+
+    printf("Topic \"%s\" proposed.\n", topic);
 
     return strdup("PTR OK\n");
 }
@@ -557,7 +558,7 @@ char* questionSubmit(char *input, int fd, int nMsg) {
     }
     else
     	fprintf(questionFd, "%s:%d:00:0:\n", question, qUserId);
-    printf("Question submit on \"%s\" (%d).\n", topic, qUserId);
+    printf("Question submited on \"%s\" (%d).\n", topic, qUserId);
 
     free(topic);
     free(question);
