@@ -780,7 +780,7 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     char qiext[3], aiext[3], *path, *directory, *AN, *reply;
 
     if (!(reply = (char * ) calloc(BUFFER_SIZE + 1, sizeof(char)))) return;
-    while ((nMsg = read(fd, reply, BUFFER_SIZE)) <= 0);
+    nMsg = read(fd, reply, BUFFER_SIZE);
 
     if (!strcmp(reply, "QGR EOF\n") || !strcmp(reply, "QGR ERR\n")) {
         printf("an error occurred while processing your request\n");
@@ -807,7 +807,7 @@ void questionGet(char *topic, char *questionChosen, int fd) {
 
     // Write text file
     if (offset >= nMsg) {
-        while ( (nMsg = read(fd, reply, BUFFER_SIZE))<= 0 );
+        nMsg = read(fd, reply, BUFFER_SIZE);
         offset = 0;
     }
 
@@ -816,7 +816,7 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     if (offset == 0) offset++;
 
     if (offset != 0 && offset >= nMsg) {
-        while ( (nMsg = read(fd, reply, BUFFER_SIZE))<= 0 );
+        nMsg = read(fd, reply, BUFFER_SIZE);
         offset = 1;
     }
   
@@ -834,7 +834,7 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     }
 
     if (offset != 0 && offset >= nMsg) {
-        while ( (nMsg = read(fd, reply, BUFFER_SIZE))<= 0 );
+        nMsg = read(fd, reply, BUFFER_SIZE);
         offset = 1;
     }
 
@@ -872,7 +872,7 @@ void questionGet(char *topic, char *questionChosen, int fd) {
         if (offset == 0) offset++;
 
         if (offset != 0 && offset >= nMsg) {
-            while ( (nMsg = read(fd, reply, BUFFER_SIZE))<= 0 );
+            nMsg = read(fd, reply, BUFFER_SIZE);
             offset = 1;
         }
 
@@ -893,7 +893,7 @@ void questionGet(char *topic, char *questionChosen, int fd) {
 
         else {
             if (offset != 0 && offset >= nMsg && (i+1) < N) {
-                while ( (nMsg = read(fd, reply, BUFFER_SIZE))<= 0 ) printf("hey\n");
+                nMsg = read(fd, reply, BUFFER_SIZE);
                 offset = 1;
             }
         }

@@ -534,7 +534,7 @@ char* questionSubmit(char *input, int fd, int nMsg) {
     free(path);
 
     /* Receive image info */
-    sscanf(input + offset, " %d", &qIMG);
+    sscanf(input + offset, "%d", &qIMG);
     offset += 2;
 
     if (qIMG) {
@@ -678,20 +678,22 @@ void questionGetReadFiles(char* path, char* question, int qUserId,
         free(qidata);
         fclose(imageFd);
         free(imgPath);
-        snprintf(response, BUFFER_SIZE, " %d", numberOfAnswers);
+        numberOfAnswers > 10 ? snprintf(response, BUFFER_SIZE, " 10") : snprintf(response, BUFFER_SIZE, " %d", numberOfAnswers);
         write(fd, response, strlen(response));
     }
 
     else {
-        snprintf(response, BUFFER_SIZE, "QGR %d %ld %s 0 %d", qUserId, qsize, qdata, numberOfAnswers);
+        numberOfAnswers > 10 ? snprintf(response, BUFFER_SIZE, " 0 10") : snprintf(response, BUFFER_SIZE, " 0 %d", numberOfAnswers);
         write(fd, response, strlen(response));
     }
     free(qdata);
 
     /* Get the answers information */
-    for (int i = 1; (i <= numberOfAnswers) && (i <= DISPLAY_ANSWERS); i++) {
+    int firstAnswer = 1;
+    if (numberOfAnswers > 10) firstAnswer = numberOfAnswers - DISPLAY_ANSWERS + 1;
+    for (int i = firstAnswer; i <= numberOfAnswers; i++) {
         questionNumber = malloc(sizeof(char) * AN_SIZE);
-        i < 10 ? snprintf(questionNumber, AN_SIZE, "0%d", i) : snprintf(question, AN_SIZE, "%d", i);
+        i < 10 ? snprintf(questionNumber, AN_SIZE, "0%d", i) : snprintf(questionNumber, AN_SIZE, "%d", i);
         getAnswerInformation(path, question, questionNumber, fd);
         free(questionNumber);
     }
@@ -712,7 +714,10 @@ void getAnswerInformation(char *path, char *question, char *numb, int fd) {
     answerDesc = malloc(sizeof(char) * BUFFER_SIZE);
     snprintf(answerDesc, BUFFER_SIZE, "%s/%s_%s%s.txt", path, question, numb, QUESTIONS_DESC);
 
-    if (!(answerDescFd = fopen(answerDesc, "r"))) exit(EXIT_FAILURE);
+    if (!(answerDescFd = fopen(answerDesc, "r"))) {
+        printf("path: %s\nquestion: %s\n", answerDesc, question);
+        exit(EXIT_FAILURE);
+    }
 
     while ((nread = getline(&line, &len, answerDescFd)) != -1) {
         token = strtok(line, ":");
@@ -736,7 +741,10 @@ void getAnswerInformation(char *path, char *question, char *numb, int fd) {
     answerPath = malloc(sizeof(char) * BUFFER_SIZE);
     snprintf(answerPath, BUFFER_SIZE, "%s/%s_%s.txt", path, question, numb);
 
-    if (!(answerFd = fopen(answerPath, "r"))) exit(EXIT_FAILURE);
+    if (!(answerFd = fopen(answerPath, "r"))) {
+        printf("cheiguei2\n");
+        exit(EXIT_FAILURE);
+    }
 
     /* Get answer size */
     fseek(answerFd, 0L, SEEK_END);
@@ -765,7 +773,10 @@ void getAnswerInformation(char *path, char *question, char *numb, int fd) {
     if (aIMG) {
         imgPath = malloc(sizeof(char) * BUFFER_SIZE);
         snprintf(imgPath, BUFFER_SIZE, "%s/%s_%s.%s", path, question, numb, aiext);
-        if (!(imageFd = fopen(imgPath, "r"))) exit(EXIT_FAILURE);
+        if (!(imageFd = fopen(imgPath, "r"))) {
+            printf("cheiguei3\n");
+            exit(EXIT_FAILURE);
+        }
 
         /* Get image size */
         fseek(imageFd, 0L, SEEK_END);
