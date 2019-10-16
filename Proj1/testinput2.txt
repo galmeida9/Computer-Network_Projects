@@ -1,0 +1,7 @@
+reg 12345
+tl
+ts 1
+ql
+qg 1
+as client/resposta1
+exit
