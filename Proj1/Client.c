@@ -1,5 +1,4 @@
 //TODO 703: re-calculate malloc size, its > than BUFFER_SIZE atm
-
 #include <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
@@ -199,7 +198,7 @@ char* receiveMessageTCP(int fd) {
             exit(1);
         printf("server response timeout\n");
     }
-
+  
     DEBUG_PRINT("Received: |%s|\n", buffer);
     return buffer;
 }
@@ -772,7 +771,6 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     char * adata, aiext[3], * aidata, * path, * directory, *AN, *reply;
 
     if (!(reply = (char * ) calloc(BUFFER_SIZE + 1, sizeof(char)))) return;
-
     while ((nMsg = read(fd, reply, BUFFER_SIZE)) <= 0);
 
     if (!strcmp(reply, "QGR EOF") || !strcmp(reply, "QGR ERR")) {
@@ -810,7 +808,7 @@ void questionGet(char *topic, char *questionChosen, int fd) {
         while ( (nMsg = read(fd, reply, BUFFER_SIZE))<= 0 );
         offset = 1;
     }
-
+  
     sscanf(reply + offset, "%d", &qIMG);
     offset += 2;
 
@@ -831,7 +829,6 @@ void questionGet(char *topic, char *questionChosen, int fd) {
 
     /* Get Number of Answers */
     sscanf(reply + offset, " %d", &N);
-    DEBUG_PRINT("[ANS] Preparing to receive %d answers.\n", N);
 
     if (N > 0) offset += (2 + floor(log10(abs(N))));
     else offset += 2;
@@ -848,7 +845,6 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     free(path);
     free(question);
 
-    /* Answers section */
     AN = (char*) malloc(3);
     for (int i = 0; i < N; i++) {
         sscanf(reply + offset, "%s %d %ld", AN, &userId ,&asize);
@@ -878,6 +874,7 @@ void questionGet(char *topic, char *questionChosen, int fd) {
             
             if (recvTCPWriteFile(fd, path, &reply, &nMsg, BUFFER_SIZE, &offset, aisize, DEBUG_TEST) == -1)
                 printf("Erro ao escrever o ficheiro da pergunta.\n");
+
             if (offset == 0) offset++;
         }
 
