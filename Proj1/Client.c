@@ -1,4 +1,5 @@
 //TODO 703: re-calculate malloc size, its > than BUFFER_SIZE atm
+//TODO timeout handle
 
 #include <arpa/inet.h>
 #include <assert.h>
@@ -50,10 +51,9 @@ char *buffer;
 int main(int argc, char **argv) {
     int *udp_fd = malloc(sizeof(int)), *tcp_fd = malloc(sizeof(int));
     char *ip, *port;
-    ssize_t n;
-    socklen_t addrlen;
     struct addrinfo hints, *resUDP, *resTCP;
     struct sockaddr_in addr;
+    socklen_t addrlen = sizeof(addr);
     buffer = malloc(sizeof(char) * BUFFER_SIZE);
     buffer[0] = '\0';
 
@@ -110,31 +110,39 @@ void parseArgs(int number, char** arguments, char **port, char **ip) {
     }
 }
 
-void connectToServer(int *udp_fd, int *tcp_fd, char *ip, char *port, struct addrinfo hints, struct addrinfo **resUDP, struct addrinfo **resTCP) {
+void connectToServer(int *udp_fd, int *tcp_fd, char *ip, char *port, 
+    struct addrinfo hints, struct addrinfo **resUDP, struct addrinfo **resTCP) {
+
     struct timeval tv = { 5, 0 };
     ssize_t n;
     memset(&hints,0, sizeof(hints));
     hints.ai_family=AF_INET;
     hints.ai_flags=AI_NUMERICSERV;
 
-    /*UDP Connection */
+    /* UDP Connection */
     if (*udp_fd < 0) {
         hints.ai_socktype=SOCK_DGRAM;
         n = getaddrinfo(ip, port, &hints, resUDP);
         if (n != 0) exit(1);
 
-        *udp_fd = socket((*resUDP)->ai_family, (*resUDP)->ai_socktype, (*resUDP)->ai_protocol);
-        if (*udp_fd == -1) exit(1);
+        if ((*udp_fd = socket(
+            (*resUDP)->ai_family, 
+            (*resUDP)->ai_socktype, 
+            (*resUDP)->ai_protocol
+        )) == -1) exit(1); 
 
-        // Setting UDP socket timeout value
-        if(setsockopt(*udp_fd, SOL_SOCKET, SO_RCVTIMEO,(struct timeval *)&tv,sizeof(struct timeval))) {
-            printf("setsockopt UDP failed\n");
+        /* Setting UDP socket timeout value */
+        if (setsockopt(
+            *udp_fd, SOL_SOCKET, SO_RCVTIMEO, 
+            (struct timeval *)&tv, sizeof(struct timeval))) {
+            
+            printf("[Error] Failed to execute setsockopt for UDP.\n");
             close(*udp_fd);
             exit(2);
         }
     }
 
-    /*TCP Connection */
+    /* TCP Connection */
     if (*tcp_fd < 0){
         hints.ai_socktype=SOCK_STREAM;
         n = getaddrinfo(ip, port, &hints, resTCP);
@@ -149,7 +157,7 @@ void SendMessageUDP(char *message, int fd, struct addrinfo *res) {
     if (n == -1) exit(1);
 }
 
-char* receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr) {
+char *receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr) {
     ssize_t n;
     addrlen = sizeof(addr);
     buffer[0] = '\0';
@@ -159,12 +167,12 @@ char* receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr) {
         if (n == -1) {
             if ((errno != EAGAIN) && (errno != EWOULDBLOCK))
                 exit(1);
-            printf("server response timeout\n");
+            printf("[Info] The operation has timed out.\n");
             break;
         }
     }
 
-    DEBUG_PRINT("Received: |%s|\n", buffer);
+    DEBUG_PRINT("[UDP] Received: |%s|\n", buffer);
     return buffer;
 }
 
@@ -197,10 +205,10 @@ char* receiveMessageTCP(int fd) {
     if (n == -1) {
         if ((errno != EAGAIN) && (errno != EWOULDBLOCK))
             exit(1);
-        printf("server response timeout\n");
+        printf("[Info] The operation has timed out.\n");
     }
 
-    DEBUG_PRINT("Received: |%s|\n", buffer);
+    DEBUG_PRINT("[TCP] Received: |%s|\n", buffer);
     return buffer;
 }
 
@@ -214,7 +222,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
     size_t size = 0;
 
     while(1) {
-        memset(buffer, 0, sizeof(buffer));
+        memset(buffer, 0, sizeof(*buffer));
         getline(&line, &size, stdin);
         command = strtok(line, " ");
 
@@ -285,7 +293,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
 
         else if ((strcmp(command, "qg") == 0) && *userId > 0) {
             int question;
-            char * arg, * reply;
+            char * arg;
             command = strtok(NULL, " ");
 
             if (command) {
@@ -328,7 +336,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
         }
 
         else if ((strcmp(command, "question_submit") == 0 || strcmp(command, "qs") == 0) && *userId > 0) {
-            char *question = NULL, *text_file = NULL, *img_file = NULL;
+            char *text_file = NULL, *img_file = NULL;
             command = strtok(NULL, "\n");
             questionChosen = strtok(command, " ");
             text_file = strtok(NULL, " ");
@@ -367,15 +375,22 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
     }
 }
 
-int registerNewUser(int id, int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr) {
-    char *message = malloc(sizeof(char) * REGISTER_SIZE);
+int registerNewUser(int id, int fd, struct addrinfo *res, socklen_t addrlen, 
+    struct sockaddr_in addr) {
 
+    char *response, *message = malloc(sizeof(char) * REGISTER_SIZE);
     snprintf(message, REGISTER_SIZE, "REG %d\n", id);
     SendMessageUDP(message, fd, res);
-    char* status = receiveMessageUDP(fd, addrlen, addr);
-    strcmp(status, "RGR OK") ==  0 ? printf("User \"%d\" registered\n", id) : printf("Could not register user, invalid user ID.\n");
     free(message);
-    return !strcmp(status, "RGR OK");
+
+    response = receiveMessageUDP(fd, addrlen, addr);
+    if (!strcmp(response, "\0")) {
+        printf("[Error] Failed to process your request.\n");
+        return 0;
+    }
+
+    strcmp(response, "RGR OK") ==  0 ? printf("User \"%d\" registered\n", id) : printf("Could not register user, invalid user ID.\n");
+    return !strcmp(response, "RGR OK");
 }
 
 void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char** topics, int* numTopics) {
@@ -385,9 +400,13 @@ void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr
     SendMessageUDP("LTP\n", fd, res);
     ltr = receiveMessageUDP(fd, addrlen, addr);
 
-    assert(!strcmp(strtok(ltr, " "), "LTR"));
-    N = atoi(strtok(NULL, " "));
+    DEBUG_PRINT("[LTP] Received response: \"%s\"\n", ltr);
 
+    if (!strcmp(ltr, "\0") || !strcmp(strtok(ltr, " "), "LTR")) {
+        printf("[Error] Failed to process your request.\n");
+    }
+
+    N = atoi(strtok(NULL, " "));
     printf("available topics:\n");
     while (i <= N) {
         iter = strtok(NULL, " ");
@@ -474,8 +493,10 @@ int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sock
     questionList = receiveMessageUDP(fd, addrlen, addr);
     response = strdup(questionList);
 
-    if (!strcmp(response,"ERR") || !strcmp(strtok(response, " "), "LQR ")) {
-        printf("ERROR\n"); // TODO proper error message
+    if (!strcmp(response,"ERR") 
+        || !strcmp(response, "\0") 
+        || !strcmp(strtok(response, " "), "LQR ")) {
+        printf("[Error] Failed to process your request.\n");
         free(response);
         return -1;
     }
@@ -487,7 +508,7 @@ int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sock
     }
 
     printf("available questions about %s:\n", topicChosen);
-    while (iter = strtok(NULL, " \n"))
+    while ((iter = strtok(NULL, " \n")))
         questions[i++] = strdup(iter);
 
     for (i = 0; i < numQuestions; i++) {
@@ -618,9 +639,8 @@ void submitQuestion(int *fd, struct addrinfo **res, int aUserID, char *topicChos
     close(*fd);
 }
 
+
 void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen, char* questionChosen, char *text_file, char *img_file) {
-    size_t len = 0;
-    ssize_t nread;
     FILE *answerFd;
     char *answerPath = malloc(strlen(text_file) + strlen(".txt") + 1);
     
@@ -636,36 +656,34 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
     fseek(answerFd, 0L, SEEK_END);
     long asize = ftell(answerFd);
     fseek(answerFd, 0L, SEEK_SET);
-    char *adata = malloc(sizeof(char) * (asize + 1));
-    fread(adata, asize, sizeof(unsigned char), answerFd);
+
+    char *message = malloc(sizeof(char) * (BUFFER_SIZE));
+    snprintf(message, BUFFER_SIZE, "ANS %d %s %s %ld ", aUserID, topicChosen, questionChosen, asize);
+    SendMessageTCP(message, &fd, res);
+
+    DEBUG_PRINT("[ANS] Answer properties:\n");
+    DEBUG_PRINT("      - User ID: \"%d\"\n", aUserID);
+    DEBUG_PRINT("      - Topic chosen: \"%s\"\n", topicChosen);
+    DEBUG_PRINT("      - Question chosen: \"%s\"\n", questionChosen);
+    DEBUG_PRINT("      - Answer size: \"%ld\"\n", asize);
+
+    char *adata = (char*) malloc(sizeof(char)*BUFFER_SIZE);
+    int sizeAux = asize;
+    int nRead;
+    while (sizeAux > 0 ) {
+        nRead = fread(adata, 1 , BUFFER_SIZE, answerFd);
+        write(fd, adata, nRead);
+        sizeAux -= BUFFER_SIZE;
+    }
+
     fclose(answerFd);
     free(answerPath);
 
-    char *message;
     int aIMG = 0;
     long isize = 0;
 
-    /* Send information */
-    int response_len = 3 + 1 + 5 + 1 + strlen(topicChosen) + 1 + strlen(questionChosen) + 1 + floor(log10(abs(asize))) + 3;
-    char *response = malloc(sizeof(char) * response_len);
-    snprintf(response, BUFFER_SIZE + asize + isize, "ANS %d %s %s %ld ", 
-        aUserID, topicChosen, questionChosen, asize);
-    SendMessageTCP(response, &fd, res);
-
-    /* Send file data */
-    char *idata = (char*) malloc(sizeof(char) * BUFFER_SIZE);
-    int sizeAux = isize;
-
-    while (sizeAux > 0) {
-        int nRead = fread(idata, 1, BUFFER_SIZE, answerFd);
-        DEBUG_PRINT("[ANS] Sending partial of %s", idata);
-        write(fd, idata, nRead);
-        sizeAux = sizeAux - BUFFER_SIZE;
-    }
-
     if (img_file != NULL) {
         aIMG = 1;
-        len = 0;
         FILE *imgFd;
         imgFd = fopen(strtok(img_file, "\n"), "rb");
 
@@ -685,24 +703,12 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
 
         fseek(imgFd, 0L, SEEK_END);
         isize = ftell(imgFd);
+        fseek(imgFd, 0L, SEEK_SET);
 
-        DEBUG_PRINT("[ANS] Answer properties:\n");
-        DEBUG_PRINT("\tUser ID: \"%d\"\n", aUserID);
-        DEBUG_PRINT("\tTopic chosen: \"%s\"\n", topicChosen);
-        DEBUG_PRINT("\tQuestion chosen: \"%s\"\n", questionChosen);
-        DEBUG_PRINT("\tasize: \"%ld\"\n", asize);
-        DEBUG_PRINT("\tadata: \"%s\"\n", adata);
-        DEBUG_PRINT("\taIMG: \"%d\"\n", aIMG);
-        DEBUG_PRINT("\taiext: \"%s\"\n", iext);
-        DEBUG_PRINT("\tisize: \"%ld\"\n", isize);
-
-        message = malloc(sizeof(char) * (BUFFER_SIZE + asize));
-        snprintf(message, BUFFER_SIZE + asize + isize, "ANS %d %s %s %ld %s %d %s %ld ", 
-            aUserID, topicChosen, questionChosen, asize, adata, aIMG, iext, isize);
+        snprintf(message, BUFFER_SIZE, " %d %s %ld ", aIMG, iext, isize);
         SendMessageTCP(message, &fd, res);
 
         int sizeAux = isize;
-        fseek(imgFd, 0L, SEEK_SET);
         char *idata = malloc(sizeof(char) * (BUFFER_SIZE));
 
         while (sizeAux > 0){
@@ -710,19 +716,23 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
             write(fd, idata, nRead);
             sizeAux = sizeAux - BUFFER_SIZE;
         }
-        write(fd, "\n", strlen("\n"));
 
+        write(fd, "\n", strlen("\n"));
         fclose(imgFd);
         free(idata);
-
     }
+
     else {
-        snprintf(response, BUFFER_SIZE,  " 0\n");
-        write(fd, " 0\n", strlen(" 0\n"));
+        snprintf(message, BUFFER_SIZE + asize + isize, " %d\n", aIMG);
+        write(fd, message, strlen(message));
     }
 
-    //Parse reply
+    DEBUG_PRINT("[ANS] Finished sending files.\n");
+    DEBUG_PRINT("[ANS] Preparing to receive server response.\n");
+
+    /* Parse reply */
     char *reply = receiveMessageTCP(fd);
+
     if (!strcmp(reply, "ANR OK")) printf("answer submitted!\n");
     else if (!strcmp(reply, "ANR NOK")) printf("error submiting.\n");
     else if (!strcmp(reply, "ANR FUL")) printf("can't submit more answers.\n");
@@ -768,19 +778,20 @@ char * questionSelectName(char * name, int num_questions, char ** questions) {
 void questionGet(char *topic, char *questionChosen, int fd) {
     int nMsg, qIMG, pathLen, dirLen, userId, offset = 0, N = 0, aIMG;
     long qsize = 0, qisize, asize, aisize;
-    char request[3], format[BUFFER_SIZE], qiext[3], * qidata;
-    char * adata, aiext[3], * aidata, * path, * directory, *AN, *reply;
+    char qiext[3], aiext[3], *path, *directory, *AN, *reply;
 
     if (!(reply = (char * ) calloc(BUFFER_SIZE + 1, sizeof(char)))) return;
 
     while ((nMsg = read(fd, reply, BUFFER_SIZE)) <= 0);
 
-    if (!strcmp(reply, "QGR EOF") || !strcmp(reply, "QGR ERR")) {
+    if (!strcmp(reply, "QGR EOF\n") || !strcmp(reply, "QGR ERR\n")) {
         printf("an error occurred while processing your request\n");
+        free(reply);
         return;
     }
 
     sscanf(reply, "%*s %*d %ld", &qsize);
+    DEBUG_PRINT("[QG] Parsed reply: %s", reply);
 
     offset = 3 + 1 + 5 + 1 + floor(log10(abs(qsize))) + 1 + 1; // get len of int
     pathLen = strlen("client/") + strlen(topic) + strlen("/") + strlen(questionChosen) + strlen(".txt") + 1;
