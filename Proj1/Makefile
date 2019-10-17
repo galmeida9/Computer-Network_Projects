@@ -13,10 +13,6 @@ FS: Server.o lib/utility.o
 user: Client.o lib/utility.o
 	$(CC) $(CFLAGS) $^ -o user $(LDFLAGS)
 
-Server.o: Server.c
-Client.o: Client.c lib/utility.h
-lib/utility.o: lib/utility.c lib/utility.h
-
 clean:
 	@echo Cleaning...
 	rm -f $(OBJS) user FS

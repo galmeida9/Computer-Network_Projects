@@ -1,23 +1,11 @@
-//TODO re-calculate malloc sizes, its > than BUFFER_SIZE sometimes
-//TODO timeout handle
-//TODO remove malloc casts
-//TODO remove floor log10
-//TODO change macro to satisfy -pedantic
-
 #include <arpa/inet.h>
-#include <assert.h>
 #include <errno.h>
-#include <math.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <unistd.h>
 #include "lib/utility.h"
 
 #define DEFAULT_PORT "58013"

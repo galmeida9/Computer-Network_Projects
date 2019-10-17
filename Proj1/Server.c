@@ -2,19 +2,14 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <unistd.h>
 #include "lib/utility.h"
 
 #define AN_SIZE 3
-#define BUFFER_SIZE 2048
-#define ID_SIZE 5
+#define DEBUG_TEST 0
 #define DISPLAY_ANSWERS 10
 #define MAX_ANSWERS 99
 #define MAX_TOPICS 99
@@ -24,10 +19,6 @@
 #define TOPIC_FOLDER "topics/"
 #define TOPIC_LIST "topics/List_of_Topics.txt"
 #define TOPICNAME_SIZE 10
-#define DEBUG_TEST 0
-
-#define DEBUG_PRINT(fmt, args...) \
-    do { if (DEBUG_TEST) fprintf(stderr, fmt, ##args); } while (0)
 
 int nUDP, nTCP, fdUDP, fdTCP, newfd, numberOfTopics = 0;
 char buffer[BUFFER_SIZE], **listWithTopics;
