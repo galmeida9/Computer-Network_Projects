@@ -208,7 +208,8 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
     
     int numTopics = -1, numQuestions = -1;
     int command_type, topicChosenNum, question, ans;
-    char *status, *command, *answerPath, *answerImg, *arg, msg[21], *line = NULL;
+    char *text_file = NULL, *img_file = NULL, *line = NULL;
+    char *status, *command, *answerPath, *answerImg, *arg, msg[21];
     char **topics, **questions, *topicChosen = NULL, *questionChosen = NULL;
     size_t size = 0;
 
@@ -247,6 +248,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             freeQuestions(numQuestions, questions);
             freeTopics(numTopics, topics);
             free(topicChosen);
+            free(questions);
             free(line);
             return;
         }
@@ -257,7 +259,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             continue;
         }
 
-        else if (!strcmp(command, "topic_list\n") || !strcmp(command, "tl\n")) {
+        else if (!strcmp(command, "tl\n") || !strcmp(command, "topic_list\n")) {
             questionList(udp_fd, resUDP, addrlen, addr, topics, &numTopics);
         }
 
@@ -302,7 +304,8 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
                 printf("Failed to process your request.\n");
         }
 
-        else if (!strcmp(command, "question_list\n") || !strcmp(command, "ql\n")) {
+        else if (!strcmp(command, "ql\n") || !strcmp(command, "question_list\n")) {
+            freeQuestions(numQuestions, questions);
             numQuestions = getQuestionList(udp_fd, resUDP, addrlen, addr, 
                 topicChosen, questions);
         }
@@ -333,17 +336,17 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             }
         }
 
-        else if ((strcmp(command, "question_submit") == 0 || strcmp(command, "qs") == 0) && *userId > 0) {
-            char *text_file = NULL, *img_file = NULL;
+        else if (!strcmp(command, "qs") || !strcmp(command, "question_submit")) {
             command = strtok(NULL, "\n");
             questionChosen = strtok(command, " ");
             text_file = strtok(NULL, " ");
             img_file = strtok(NULL, "\n");
+           
             if (questionChosen == NULL || text_file == NULL) printf("Invalid arguments.\n");
             else submitQuestion(tcp_fd, &resTCP, *userId, topicChosen, questionChosen, text_file, img_file);
         }
 
-        else if (((strcmp(command, "as") == 0) || (strcmp(command, "answer_submit") == 0)) && *userId > 0) {
+        else if ((!strcmp(command, "as") || !strcmp(command, "answer_submit"))) {
             answerPath = strtok(NULL, " ");
             answerImg = strtok(NULL, " ");
             answerSubmit(tcp_fd, &resTCP, *userId, topicChosen, questionChosen, strtok(answerPath, "\n"), answerImg);
@@ -417,9 +420,10 @@ void freeTopics(int numTopics, char **topics) {
 }
 
 void freeQuestions(int numQuestions, char** questions){
-    int i;
-    for (i=0; i<numQuestions; i++) free(questions[i]);
-    free(questions);
+    for (int i = 0; i < numQuestions; i++) {
+        free(questions[i]);
+        questions[i] = NULL;
+    }
 }
 
 char* topicSelectNum(int numTopics, char** topics, int topicChosen) {
@@ -470,7 +474,9 @@ char* topicSelectName(int numTopics, char** topics, char* name){
     return topic;
 }
 
-int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char* topicChosen, char** questions){
+int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, 
+    struct sockaddr_in addr, char* topicChosen, char** questions) {
+
     int i = 0, lenMsg = LEN_COMMAND + 1 + LEN_TOPIC + 1 + 1, numQuestions = 0;
     char *iter, *message, *questionList, *response;
 
@@ -500,11 +506,9 @@ int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sock
     }
 
     printf("Listing questions for topic %s:\n", topicChosen);
-    while ((iter = strtok(NULL, " \n"))) {
-        if (questions[i] != NULL)
-            free(questions[i]);
+
+    while ((iter = strtok(NULL, " \n")))
         questions[i++] = strdup(iter);
-    }
         
     for (i = 0; i < numQuestions; i++) {
         questions[i] = strtok(questions[i], ":");
