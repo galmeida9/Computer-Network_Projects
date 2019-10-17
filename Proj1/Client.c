@@ -407,13 +407,14 @@ int registerNewUser(int id, int fd, struct addrinfo *res, socklen_t addrlen,
 
 void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char** topics, int* numTopics) {
     int i = 1, N, offset, user;
-    char * iter, * ltr, * name, * sep;
+    char *iter, *ltr, *name, *sep;
 
     SendMessageUDP("LTP\n", fd, res);
     ltr = receiveMessageUDP(fd, addrlen, addr);
 
     if (!strcmp(ltr, "\0") || strcmp(strtok(ltr, " "), "LTR")) {
         printf("[Error] Failed to process your request.\n");
+        return;
     }
 
     N = atoi(strtok(NULL, " "));
@@ -659,10 +660,10 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
     
     sprintf(answerPath, "%s.txt", text_file);
     DEBUG_PRINT("[ANS] Destiny file path: %s\n", answerPath);
-    
-    answerFd = fopen(answerPath, "r");
-    if (answerFd == NULL) {
-        printf("[ERROR] Can't find answer file.\n");
+   
+    if (!(answerFd = fopen(answerPath, "r"))) {
+        printf("[Error] Can't find the specified answer file.\n");
+        free(answerPath);
         return;
     }
 
@@ -674,6 +675,7 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
     snprintf(message, BUFFER_SIZE, "ANS %d %s %s %ld ", 
         aUserID, topicChosen, questionChosen, asize);
     SendMessageTCP(message, &fd, res);
+    free(message);
 
     DEBUG_PRINT("[ANS] Answer properties:\n");
     DEBUG_PRINT("      - User ID: \"%d\"\n", aUserID);
@@ -691,12 +693,12 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
         sizeAux -= BUFFER_SIZE;
     }
 
-    fclose(answerFd);
     free(answerPath);
+    fclose(answerFd);
 
     if (img_file != NULL) {
         if (!(imageFd = fopen(strtok(img_file, "\n"), "rb"))) {
-            printf("Can't find image file.\n");
+            printf("[Error] Can't find the specified image file.\n");
             free(adata);
             return;
         }
@@ -754,7 +756,6 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
     else if (!strcmp(reply, "ANR NOK")) printf("Failed to process your request.\n");
 
     close(fd);
-    free(message);
     free(adata);
 }
 
