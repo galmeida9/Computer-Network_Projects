@@ -25,5 +25,6 @@ int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int *sizeMsg,
     int bufferSize, int *offset, int size, int DEBUG_TEST);
 
 int lengthInt(int x);
+char** arrayInit(int len);
 
 #endif /* UTILITY_H */

@@ -75,3 +75,16 @@ int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int *sizeMsg,
 int lengthInt(int x) {
     return (!x ? 1 : floor(log10(abs(x))) + 1);
 }
+
+char** arrayInit(int len) {
+    char **array;
+
+    if (!(array = malloc(sizeof(char *) * len))) {
+        printf("malloc error.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    for (int i = 0; i < len; i++)
+        array[i] = NULL;
+    return array;
+}
