@@ -35,6 +35,7 @@ void questionGet(char *topic, char *questionChosen, int fd);
 char* questionSelectName(char *name, int num_questions, char **questions);
 void submitQuestion(int fd, struct addrinfo **res, int aUserID, char *topicChosen, char *question, char *text_file, char *img_file);
 void handleTimeout(int sig);
+char **arrayInit(int len);
 
 int DEBUG_TEST = 0;
 char *buffer;
@@ -52,6 +53,7 @@ int main(int argc, char **argv) {
     ip = strdup("127.0.0.1");
     parseArgs(argc, argv, &port, &ip);
     printf("Connected to %s:%s\n", ip, port);
+    printf("Enter 'help' for available commands.\n\n");
 
     *udp_fd = -1; *tcp_fd = -1;
     connectToServer(udp_fd, tcp_fd, ip, port, hints, &resUDP, &resTCP);
@@ -173,6 +175,7 @@ void SendMessageTCP(char *message, int *fd, struct addrinfo **res) {
 
     *fd = socket((*res)->ai_family, (*res)->ai_socktype, (*res)->ai_protocol);
     if (*fd == -1) exit(1);
+
     // Setting TCP socket timeout value
     if(setsockopt(*fd, SOL_SOCKET, SO_RCVTIMEO,(struct timeval *)&tv,sizeof(struct timeval))) {
         printf("setsockopt TCP failed\n");
@@ -189,7 +192,6 @@ void SendMessageTCP(char *message, int *fd, struct addrinfo **res) {
 
 char* receiveMessageTCP(int fd) {
     ssize_t n;
-    //memset(buffer, 0, BUFFER_SIZE);
     buffer[0] = '\0';
 
     n = read(fd, buffer, BUFFER_SIZE);
@@ -199,19 +201,21 @@ char* receiveMessageTCP(int fd) {
         printf("[Info] The operation has timed out.\n");
     }
 
-    /* DEBUG_PRINT("[TCP] Received: |%s|\n", buffer); */
     return buffer;
 }
 
 void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP, 
     struct addrinfo *resTCP, socklen_t addrlen, struct sockaddr_in addr) {
     int ans, numTopics = -1, numQuestions = -1;
-    char * status, msg[21];
+    char *status, msg[21];
     char *line = NULL, *command;
-    char ** topics = malloc(sizeof(char*)*NUM_TOPICS), ** questions = malloc(sizeof(char*)*NUM_QUESTIONS);
-    char * topicChosen = NULL, * questionChosen = NULL;
+    char **topics, **questions;
+    char *topicChosen = NULL, *questionChosen = NULL;
     char *answerPath, *answerImg;
     size_t size = 0;
+
+    topics = arrayInit(NUM_TOPICS);
+    questions = arrayInit(NUM_QUESTIONS);
 
     while(1) {
         memset(buffer, 0, sizeof(*buffer));
@@ -241,6 +245,10 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
         else if ((strcmp(command, "ts") == 0) && *userId != -1){
             int topicChosenNum;
             char *arg;
+
+            if (topicChosen != NULL)
+                free(topicChosen);
+
             command = strtok(NULL, " ");
             if (command != NULL) {
                 arg = strtok(command, "\n");
@@ -255,8 +263,12 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
 
         else if ((strcmp(command, "topic_select") == 0) && *userId > 0) {
             char *arg;
+
+            if (topicChosen != NULL)
+                free(topicChosen);
+            
             command = strtok(NULL, " ");
-            if (command != NULL){
+            if (command != NULL) {
                 arg = strtok(command, "\n");
                 if (strtok(NULL, " ") != NULL || arg == NULL)
                     printf("Invalid command.\n");
@@ -267,15 +279,18 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
         }
 
         else if (!strcmp(command, "tp") || !strcmp(command, "topic_propose")) {
-            sprintf(msg, "PTP %d %s", *userId, strtok(NULL, " "));
+            char *topic = strtok(NULL, "\n");
+            sprintf(msg, "PTP %d %s\n", *userId, topic);
             SendMessageUDP(msg, udp_fd, resUDP);
 
             DEBUG_PRINT("[PTP] Sent: \"%s\"\n", msg);
             status = receiveMessageUDP(udp_fd, addrlen, addr);
             DEBUG_PRINT("[PTP] Received: \"%s\"\n", status);
 
-            if (!strcmp(status, "PTR OK"))
+            if (!strcmp(status, "PTR OK")) {
                 printf("Topic accepted!\n");
+                topicChosen = strdup(topic);
+            }
             else if (!strcmp(status, "PTR DUP"))
                 printf("Could not register topic, topic already exists.\n");
             else if (!strcmp(status, "PTR FUL"))
@@ -365,7 +380,6 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             freeQuestions(numQuestions, questions);
             freeTopics(numTopics, topics);
             free(line);
-            free(topicChosen);
             return;
         }
 
@@ -393,7 +407,8 @@ int registerNewUser(int id, int fd, struct addrinfo *res, socklen_t addrlen,
     return !strcmp(response, "RGR OK");
 }
 
-void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char** topics, int* numTopics) {
+void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, 
+    struct sockaddr_in addr, char** topics, int* numTopics) {
     int i = 1, N, offset, user;
     char *iter, *ltr, *name, *sep;
 
@@ -406,7 +421,7 @@ void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr
     }
 
     N = atoi(strtok(NULL, " "));
-    printf("available topics:\n");
+    printf("Listing topics:\n");
     while (i <= N) {
         iter = strtok(NULL, " ");
 
@@ -418,8 +433,10 @@ void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr
         name[offset] = '\0';
         user = atoi(iter + offset + 1);
 
-        topics[i-1] = strdup(iter);
-        printf("%d - %s (proposed by %d)\n", i++, name, user);
+        if (topics[i - 1] != NULL)
+            free(topics[i - 1]);
+        topics[i - 1] = strdup(iter);
+        printf("Topic %2d - %s (proposed by %d)\n", i++, name, user);
 
         free(name);
     }
@@ -433,20 +450,20 @@ void freeTopics(int numTopics, char **topics) {
     free(topics);
 }
 
-char* topicSelectNum(int numTopics, char** topics, int topicChosen){
-    if (numTopics == -1){
+char* topicSelectNum(int numTopics, char** topics, int topicChosen) {
+    if (numTopics == -1) {
         printf("Run tl first.\n");
         return NULL;
     }
-    else if (topicChosen > numTopics || topicChosen <= 0){
+    else if (topicChosen > numTopics || topicChosen <= 0) {
         printf("Invalid topic number.\n");
         return NULL;
     }
 
-    char *topicInfo = strdup(topics[topicChosen-1]);
+    char *topicInfo = strdup(topics[topicChosen - 1]);
     char *topic = strdup(strtok(topicInfo, ":"));
     char *userId = strdup(strtok(NULL, ":"));
-    printf("selected topic: %s (%s)\n", topic, userId);
+    printf("Selecting topic: %s (%s)\n", topic, userId);
     free(topicInfo);
     free(userId);
     return topic;
@@ -473,7 +490,10 @@ char* topicSelectName(int numTopics, char** topics, char* name){
         }
     }
 
-    topic == NULL ? printf("Can't find that topic.\n") : printf("selected topic: %s (%s)\n", topic, userId);
+    !topic 
+    ? printf("Can't find that topic.\n") 
+    : printf("Selecting topic: %s (%s)\n", topic, userId);
+    
     free(userId);
     return topic;
 }
@@ -507,13 +527,16 @@ int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sock
         return -1;
     }
 
-    printf("Available questions about %s:\n", topicChosen);
-    while ((iter = strtok(NULL, " \n")))
+    printf("Listing questions for topic %s:\n", topicChosen);
+    while ((iter = strtok(NULL, " \n"))) {
+        if (questions[i] != NULL)
+            free(questions[i]);
         questions[i++] = strdup(iter);
-
+    }
+        
     for (i = 0; i < numQuestions; i++) {
         questions[i] = strtok(questions[i], ":");
-        printf("%d - %s\n", i + 1, questions[i]);
+        printf("Question %2d - %s\n", i + 1, questions[i]);
     }
 
     free(response);
@@ -846,7 +869,6 @@ void questionGet(char *topic, char *questionChosen, int fd) {
 
     /* Get Number of Answers */
     sscanf(reply + offset, " %d", &N);
-    DEBUG_PRINT("[ANS] Preparing to receive %d answer(s).\n", N);
 
     if (N > 0) offset += (2 + floor(log10(abs(N))));
     else offset += 2;
@@ -859,6 +881,8 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     fread(question, 1, BUFFER_SIZE, fp);
     question[qsize] = '\0';
     printf("\nQ: %s\n", question);
+    printf("\n%d answers found for this question:\n", N);
+
     fclose(fp);
     free(path);
     free(question);
@@ -907,4 +931,17 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     }
     free(AN);
     free(reply);
+}
+
+char **arrayInit(int len) {
+    char **array;
+
+    if (!(array = malloc(sizeof(char *) * len))) {
+        printf("[Error] Out of available resources.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    for (int i = 0; i < len; i++)
+        array[i] = NULL;
+    return array;
 }

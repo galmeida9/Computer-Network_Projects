@@ -29,7 +29,7 @@ int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int *sizeMsg,
     if (toWrite <= (*sizeMsg - *offset)) {
         /* Case #1: data completely fit the buffer. */
         fwrite(*bufferAux+*offset, sizeof(char), toWrite, fp);
-        printf("Copying file to %s (%d%% completed)", 
+        printf("Retrieving file %s (%d%% completed)", 
             filePath, toWrite / size * 100);
         *offset = *offset + toWrite + 1;
         toWrite = 0;
@@ -38,7 +38,7 @@ int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int *sizeMsg,
         /* Case #2: the buffer didn't accommodate the full data,
          * -------  there's still data to be read. */
         fwrite(*bufferAux+*offset, sizeof(char), *sizeMsg-*offset, fp);
-        printf("Copying file to %s (%d%% completed)", 
+        printf("Retrieving file %s (%d%% completed)", 
             filePath, (*sizeMsg-*offset) / size * 100);
         toWrite = toWrite - (*sizeMsg-*offset);
     }
@@ -51,7 +51,7 @@ int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int *sizeMsg,
         fwrite(buffer, 1, sizeAux, fp);
         percentage = (size - toWrite) * 1.0 / size * 100;
 
-        printf("\rCopying file to %s (%.0f%% completed)", filePath, percentage);
+        printf("\rRetrieving file %s (%.0f%% completed)", filePath, percentage);
         
         toWrite = toWrite - sizeAux;
         if (toWrite <= 0) {
@@ -72,6 +72,6 @@ int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int *sizeMsg,
     return 0;
 }
 
-int lengthInt(int x){
-    return floor(log10(abs(x))) + 1;
+int lengthInt(int x) {
+    return (!x ? 1 : floor(log10(abs(x))) + 1);
 }

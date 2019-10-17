@@ -330,56 +330,50 @@ char* registerNewStudent(char *arg1) {
 
 char* listOfTopics() {
     int addToList = 0;
-    char *response = malloc(sizeof(char) * BUFFER_SIZE);
-    char *finalResponse = malloc(sizeof(char) * BUFFER_SIZE);
-    char numberString[6], *line = NULL, *token, *id;
+    char *response, *finalResponse, *token, *id, *line = NULL;
     size_t len = 0;
     ssize_t nread;
     FILE *topicList;
 
     if (numberOfTopics == 0) addToList = 1;
 
-    strcpy(response, " ");
     if (!(topicList = fopen(TOPIC_LIST, "r"))) {
         printf("Error oppening topic list file.\n");
-        free(response);
-        free(finalResponse);
         return strdup("ERR\n");
     }
 
+    response = calloc(BUFFER_SIZE, sizeof(char));
+    finalResponse = malloc(sizeof(char) * BUFFER_SIZE);
+    
+    
     while ((nread = getline(&line, &len, topicList)) != -1) {
+        strcat(response, " ");
+        
         /* Get topic */
         token = strtok(line, ":");
         strcat(response, token);
-        if (addToList == 1) {
-            listWithTopics[numberOfTopics] = strdup(token);
-            numberOfTopics++;
-        }
-        response[strlen(response)] = '\0';
-        strcat(response, ":\0");
-
+        if (addToList == 1)
+            listWithTopics[numberOfTopics++] = strdup(token);
+        
         /* Get user ID */
         token = strtok(NULL, ":");
         id = strtok(token, "\n");
-        id[ID_SIZE] = '\0';
 
-        /* Put everything together */
+        /* Place descriptor together */
+        strcat(response, ":");
         strcat(response, id);
-        response[strlen(response)] = '\0';
-        strcat(response, " \0");
     }
 
     /* Build final response */
-    strcpy(finalResponse, "LTR ");
-    sprintf(numberString, "%d", numberOfTopics);
-    numberString[strlen(numberString)] = '\0';
-    strcat(finalResponse, numberString);
-    strcat(finalResponse, response);
-    finalResponse[strlen(finalResponse) - 1] = '\n';
+    if (numberOfTopics == 0)
+        sprintf(finalResponse, "LTR 0\n");
+    else
+        sprintf(finalResponse, "LTR %d%s\n", numberOfTopics, response);
 
     fclose(topicList);
     free(response);
     free(line);
+    DEBUG_PRINT("[LTR] Sending: \"%s\"", finalResponse);
     return finalResponse;
 }
 
