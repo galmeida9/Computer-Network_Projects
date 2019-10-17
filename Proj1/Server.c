@@ -350,7 +350,12 @@ char* listOfTopics() {
     if (numberOfTopics == 0) addToList = 1;
 
     strcpy(response, " ");
-    if (!(topicList = fopen(TOPIC_LIST, "r"))) exit(EXIT_FAILURE);
+    if (!(topicList = fopen(TOPIC_LIST, "r"))) {
+        printf("Error oppening topic list file.\n");
+        free(response);
+        free(finalResponse);
+        return strdup("ERR\n");
+    }
 
     while ((nread = getline(&line, &len, topicList)) != -1) {
         /* Get topic */
@@ -432,7 +437,10 @@ void updateListWithTopics() {
     ssize_t nread;
     FILE *topicList;
 
-    if (!(topicList = fopen(TOPIC_LIST, "r"))) exit(EXIT_FAILURE);
+    if (!(topicList = fopen(TOPIC_LIST, "r"))) {
+        printf("Error oppening topic list file.\n");
+        return;
+    }
 
     while ((nread = getline(&line, &len, topicList)) != -1) {
         token = strtok(line, ":");
@@ -456,7 +464,10 @@ void addToTopicList(char *topic, char *usedId) {
     FILE *topicList;
 
     listWithTopics[numberOfTopics++] = strdup(topic);
-    if (!(topicList = fopen(TOPIC_LIST, "a"))) exit(EXIT_FAILURE);
+    if (!(topicList = fopen(TOPIC_LIST, "a"))) {
+        printf("Error oppening topic list file.\n");
+        return;
+    }
 
     fprintf(topicList, "%s:%s\n", topic, usedId);
     fclose(topicList);
@@ -589,7 +600,12 @@ char* questionGet(char *input, int fd) {
     topicFolderPath = strdup(path);
     strcat(path, QUESTIONS_LIST);
 
-    if (!(questionsFd = fopen(path, "r"))) exit(EXIT_FAILURE);
+    if (!(questionsFd = fopen(path, "r"))) {
+        printf("Could not open question %s description file.\n", question);
+        free(path);
+        free(topicFolderPath);
+        return;
+    }
 
     while ((nread = getline(&line, &len, questionsFd)) != -1) {
         if (!strcmp(strtok(line, ":"), question)) {
@@ -631,7 +647,11 @@ void questionGetReadFiles(char* path, char* question, int qUserId,
     snprintf(questionPath, BUFFER_SIZE, "%s/%s.txt", path, question);
 
     /*Get the question in the file, check if there is a image and what is its extention*/
-    if (!(questionFd = fopen(questionPath, "r"))) exit(EXIT_FAILURE);
+    if (!(questionFd = fopen(questionPath, "r"))) {
+        printf("Failed to read the question %s file.\n", question);
+        free(questionPath);
+        return;
+    }
     fseek(questionFd, 0L, SEEK_END);
     long qsize = ftell(questionFd);
     fseek(questionFd, 0L, SEEK_SET);
@@ -659,7 +679,13 @@ void questionGetReadFiles(char* path, char* question, int qUserId,
         imgPath = malloc(sizeof(char) * BUFFER_SIZE);
 
         snprintf(imgPath, BUFFER_SIZE, "%s/%s.%s", path, question, qiext);
-        if (!(imageFd = fopen(imgPath, "r"))) exit(EXIT_FAILURE);
+        if (!(imageFd = fopen(imgPath, "r"))) {
+            printf("Failed to open question %s image file.\n", question);
+            free(imgPath);
+            free(qdata);
+            free(response);
+            return;
+        }
         fseek(imageFd, 0L, SEEK_END);
         qisize  = ftell(imageFd);
         fseek(imageFd, 0L, SEEK_SET);
@@ -715,8 +741,9 @@ void getAnswerInformation(char *path, char *question, char *numb, int fd) {
     snprintf(answerDesc, BUFFER_SIZE, "%s/%s_%s%s.txt", path, question, numb, QUESTIONS_DESC);
 
     if (!(answerDescFd = fopen(answerDesc, "r"))) {
-        printf("path: %s\nquestion: %s\n", answerDesc, question);
-        exit(EXIT_FAILURE);
+        printf("Failed to open answer %s description file of question %s.\n", numb, question);
+        free(answerDesc);
+        return;
     }
 
     while ((nread = getline(&line, &len, answerDescFd)) != -1) {
@@ -742,8 +769,10 @@ void getAnswerInformation(char *path, char *question, char *numb, int fd) {
     snprintf(answerPath, BUFFER_SIZE, "%s/%s_%s.txt", path, question, numb);
 
     if (!(answerFd = fopen(answerPath, "r"))) {
-        printf("cheiguei2\n");
-        exit(EXIT_FAILURE);
+        printf("Failed to open answer %s file of question %s.\n", numb, question);
+        free(answerPath);
+        free(line);
+        return;
     }
 
     /* Get answer size */
@@ -774,8 +803,11 @@ void getAnswerInformation(char *path, char *question, char *numb, int fd) {
         imgPath = malloc(sizeof(char) * BUFFER_SIZE);
         snprintf(imgPath, BUFFER_SIZE, "%s/%s_%s.%s", path, question, numb, aiext);
         if (!(imageFd = fopen(imgPath, "r"))) {
-            printf("cheiguei3\n");
-            exit(EXIT_FAILURE);
+            printf("Could not open answer %s image file of question %s", numb, question);
+            free(adata);
+            free(line);
+            free(imgPath);
+            return;
         }
 
         /* Get image size */
