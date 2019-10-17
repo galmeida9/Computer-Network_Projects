@@ -20,12 +20,14 @@ int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int *sizeMsg,
     if (!(fp = fopen(filePath, "wb"))) return -1;
     buffer = (char*) malloc(sizeof(char) * bufferSize);
 
+    DEBUG_PRINT("\n");
     DEBUG_PRINT("[RCVTCP] Message size: \"%d\"\n", *sizeMsg);
     DEBUG_PRINT("[RCVTCP] Offset: \"%d\"\n", *offset);
     DEBUG_PRINT("[RCVTCP] Size: \"%d\"\n", size);
     
     int toWrite = size;
     if (toWrite <= (*sizeMsg - *offset)) {
+        /* Case #1: data completely fit the buffer. */
         fwrite(*bufferAux+*offset, sizeof(char), toWrite, fp);
         printf("Copying file to %s (%d%% completed)", 
             filePath, toWrite / size * 100);
@@ -33,13 +35,15 @@ int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int *sizeMsg,
         toWrite = 0;
     }
     else if (*offset < *sizeMsg) {
+        /* Case #2: the buffer didn't accommodate the full data,
+         * -------  there's still data to be read. */
         fwrite(*bufferAux+*offset, sizeof(char), *sizeMsg-*offset, fp);
         printf("Copying file to %s (%d%% completed)", 
             filePath, (*sizeMsg-*offset) / size * 100);
         toWrite = toWrite - (*sizeMsg-*offset);
     }
 
-    /* Receive message if needed */
+    /* Receive the remaining portion of the data, if needed. */
     while (toWrite > 0 && (nMsg = read(fd, buffer, 1)) > 0) {
         fflush(stdout);
         
@@ -56,7 +60,7 @@ int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int *sizeMsg,
             *sizeMsg = nMsg;
             break;
         }
-        memset(buffer, 0, sizeof(buffer));
+        memset(buffer, 0, sizeof(*buffer));
         *offset = 0;
     }
     printf("\n");
@@ -66,4 +70,8 @@ int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int *sizeMsg,
     memcpy(*bufferAux, buffer, nMsg);
     free(buffer);
     return 0;
+}
+
+int lengthInt(int x){
+    return floor(log10(abs(x))) + 1;
 }

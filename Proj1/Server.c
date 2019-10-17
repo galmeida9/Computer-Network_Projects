@@ -1,7 +1,5 @@
-//TODO remove server exclusive recvTCP and use lib's
 
 #include <arpa/inet.h>
-#include <math.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <signal.h>
@@ -13,7 +11,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-//#include "lib/utility.h"
+#include "lib/utility.h"
 
 #define AN_SIZE 3
 #define BUFFER_SIZE 2048
@@ -39,8 +37,8 @@ struct addrinfo hintsUDP, hintsTCP, *resUDP, *resTCP;
 struct sockaddr_in addrUDP, addrTCP;
 
 void waitRequest();
-void handleKill(int sig);
-char* processUDPMessage(char *buffer, int len);
+void handleKill();
+char* processUDPMessage(char *buffer);
 char* processTCPMessage(char *buffer, int len, int fd);
 int checkIfStudentCanRegister(int number);
 char* registerNewStudent(char *arg1);
@@ -54,9 +52,8 @@ char* questionGet(char *input, int fd);
 void questionGetReadFiles(char *path, char *question, int qUserId, int numberOfAnswers, int qIMG, char *qixt, int fd);
 void getAnswerInformation(char *path, char *question, char *numb, int fd);
 char* listOfQuestions(char *topic);
-char* submitAnswer(char *input, int sizeInput, int fd);
-char* questionSubmit(char *input, int fd);
-int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int bufferSize, int *offset, int size);
+char* questionSubmit(char *input, int fd, int nMsg);
+char* submitAnswer(char* input, int fd, int nMsg);
 
 int main(int argc, char **argv) {
     int opt;
@@ -167,14 +164,14 @@ void waitRequest() {
         else {
             if (FD_ISSET(fdUDP, &readset)){
                 printf("\n[UDP] ");
-                int addrlen = sizeof(addrUDP);
+                socklen_t addrlen = sizeof(addrUDP);
                 char *bufferUDP = malloc(sizeof(char) * BUFFER_SIZE);
 
                 nMsg = recvfrom(fdUDP, bufferUDP, BUFFER_SIZE, 0, (struct sockaddr*) &addrUDP, &addrlen);
                 if (nMsg == -1) /*error*/ exit(EXIT_FAILURE);
 
                 /*Analyze message*/
-                char *response = processUDPMessage(strtok(bufferUDP, "\n"), BUFFER_SIZE);
+                char *response = processUDPMessage(strtok(bufferUDP, "\n"));
 
                 /*Send response*/
                 nMsg = sendto(fdUDP, response, strlen(response), 0, (struct sockaddr*) &addrUDP, addrlen);
@@ -212,7 +209,7 @@ void waitRequest() {
     close(fdTCP);
 }
 
-void handleKill(int sig) {
+void handleKill() {
     freeaddrinfo(resUDP);
     freeaddrinfo(resTCP);
     close(fdUDP);
@@ -225,11 +222,9 @@ void handleKill(int sig) {
 /**
 UDP message handling
 - parameter buffer: buffer containing the request
-- parameter len: buffer length
 */
-char* processUDPMessage(char *buffer, int len) {
+char* processUDPMessage(char *buffer) {
     char *command, *response, *bufferBackup;
-    size_t size;
 
     bufferBackup = strdup(buffer);
     command = strtok(buffer, " ");
@@ -281,7 +276,6 @@ TCP message handling
 */
 char* processTCPMessage(char *buffer, int len, int fd) {
     char *command, *response, *bufferBackup;
-    size_t size;
 
     bufferBackup = (char*) malloc(sizeof(char) * (BUFFER_SIZE + 1));
     memcpy(bufferBackup, buffer, len);
@@ -293,10 +287,10 @@ char* processTCPMessage(char *buffer, int len, int fd) {
         response = questionGet(bufferBackup, fd);
 
     else if (!strcmp(command, "QUS"))
-        response = questionSubmit(bufferBackup, fd);
+        response = questionSubmit(bufferBackup, fd, len);
 
     else if (!strcmp(command, "ANS"))
-        response = submitAnswer(bufferBackup, len, fd);
+        response = submitAnswer(bufferBackup, fd, len);
 
     else {
         printf("Command not found.\n");
@@ -330,7 +324,6 @@ int checkIfStudentCanRegister(int number) {
 
 char* registerNewStudent(char *arg1) {
     int stuNumber = atoi(arg1);
-    char *response;
 
     if (stuNumber == 0) {
         printf("Number error.\n");
@@ -395,10 +388,9 @@ char* listOfTopics() {
     return finalResponse;
 }
 
-// TODO check response
 char* topicPropose(char *input) {
     int pathLen;
-    char *id, *topic, *response, *directory, *questionPath;
+    char *id, *topic, *directory, *questionPath;
     FILE *topicFd;
 
     strtok(input, " "); id = strtok(NULL, " "); topic = strtok(NULL, " ");
@@ -428,6 +420,8 @@ char* topicPropose(char *input) {
     if (!(topicFd = fopen(questionPath, "w"))) printf("Failed to create file for the new topic.\n");
     fclose(topicFd);
     free(questionPath);
+
+    printf("Topic \"%s\" proposed.\n", topic);
 
     return strdup("PTR OK\n");
 }
@@ -472,8 +466,8 @@ void freeTopicInList() {
     for (int i = 0; i < numberOfTopics; i++) free(listWithTopics[i]);
 }
 
-char* questionSubmit(char *input, int fd) {
-	int nMsg, pathLen, qUserId, found, NQ = 0;
+char* questionSubmit(char *input, int fd, int nMsg) {
+	int pathLen, qUserId, found, NQ = 0;
 	int qsize = 0, offset = 0, qIMG = 0, isize = 0;
 	char *topic, *question, *line = NULL, *response, *questionAux, *path, *iext;
 	size_t len;
@@ -481,7 +475,10 @@ char* questionSubmit(char *input, int fd) {
 
     topic = (char*) malloc(sizeof(char)* (TOPICNAME_SIZE+1));
     question = (char*) malloc(sizeof(char)* (TOPICNAME_SIZE+1));
+
     sscanf(input, "%*s %d %s %s %d", &qUserId, topic, question, &qsize);
+    if (qUserId == 0) return strdup("QUR NOK\n");
+    offset += 3 + 1 + lengthInt(qUserId) + 1 + strlen(topic) + 1 + strlen(question) + 1 + lengthInt(qsize) + 1;
 
 	/* Check if topic exists */
     if (!(found = isTopicInList(topic))) { return strdup("QUR NOK\n"); }
@@ -519,7 +516,6 @@ char* questionSubmit(char *input, int fd) {
             printf("Question list of %s is full.\n", topic);
             response = strdup("QUR FUL\n");
         }
-        free(path);
         free(topic);
         free(question);
         fclose(questionFd);
@@ -532,35 +528,38 @@ char* questionSubmit(char *input, int fd) {
     snprintf(path, pathLen, "%s%s/%s.txt", TOPIC_FOLDER, topic, question);
 
     /* Receive and write question file data */
-    offset = 3 + 1 + floor(log10(abs(qUserId))) + 1 + strlen(topic) + 1;
-    offset += strlen(question) + 1 + floor(log10(abs(qsize))) + 1 + 2;
-    if (recvTCPWriteFile(fd, path, &input, BUFFER_SIZE, &offset, qsize) == -1)
+    if (recvTCPWriteFile(fd, path, &input, &nMsg, BUFFER_SIZE, &offset, qsize, DEBUG_TEST) == -1)
         printf("Erro a receber e escrever o ficheiro\n");
+    if (offset == 0) offset++;
     free(path);
 
     /* Receive image info */
-    iext = (char*) malloc(sizeof(char)*4); iext[0] = '\0';
-    sscanf(input + offset, " %d %s %d", &qIMG, iext , &isize);
+    sscanf(input + offset, "%d", &qIMG);
+    offset += 2;
 
     if (qIMG) {
+        iext = (char*) malloc(sizeof(char)*4); iext[0] = '\0';
+        sscanf(input + offset, "%s %d", iext , &isize);
         fprintf(questionFd, "%s:%d:00:1:%s:\n", question, qUserId, iext);
 
-        offset += 1 + 1 + strlen(iext) + 1 + floor(log10(abs(isize))) + 2;
+        offset += strlen(iext) + 1 + lengthInt(isize) + 1;
+
         /* Prepare question image path (example: question.png\0). */
         pathLen = strlen(TOPIC_FOLDER) + strlen(topic) + 1 + strlen(question) + 1 + strlen(iext) + 1;
         path = (char*) malloc(sizeof(char) * pathLen);
         snprintf(path, pathLen, "%s%s/%s.%s", TOPIC_FOLDER, topic, question, iext);
 
         /* Receive and write image file */
-        if (recvTCPWriteFile(fd, path, &input, BUFFER_SIZE, &offset, isize) == -1)
+        if (recvTCPWriteFile(fd, path, &input, &nMsg, BUFFER_SIZE, &offset, isize, DEBUG_TEST) == -1)
             printf("Erro a receber e escrever o ficheiro\n");
+        if (offset == 0) offset++;
         free(path);
+        free(iext);
     }
     else
     	fprintf(questionFd, "%s:%d:00:0:\n", question, qUserId);
-    printf("Question submit on \"%s\" (%d).\n", topic, qUserId);
+    printf("Question submited on \"%s\" (%d).\n", topic, qUserId);
 
-    free(iext);
     free(topic);
     free(question);
     fclose(questionFd);
@@ -569,8 +568,8 @@ char* questionSubmit(char *input, int fd) {
 
 char* questionGet(char *input, int fd) {
     int qUserId, numberOfAnswers, qIMG = 0, foundQuestion = 0;
-    char *response, *topic, *question, *path, *topicFolderPath, *qiext = NULL;
-    char *token, *line = NULL;
+    char *topic, *question, *path, *topicFolderPath, *qiext = NULL;
+    char *line = NULL;
     size_t len = 0;
     ssize_t nread;
     FILE *questionsFd;
@@ -625,8 +624,6 @@ void questionGetReadFiles(char* path, char* question, int qUserId,
     int numberOfAnswers, int qIMG, char *qiext, int fd) {
     int sizeAux, nRead;
     char *questionPath, *response, *qdata;
-    size_t len = 0;
-    ssize_t nread;
     FILE *questionFd;
 
     /* Path for the requested question */
@@ -681,20 +678,22 @@ void questionGetReadFiles(char* path, char* question, int qUserId,
         free(qidata);
         fclose(imageFd);
         free(imgPath);
-        snprintf(response, BUFFER_SIZE, " %d", numberOfAnswers);
+        numberOfAnswers > 10 ? snprintf(response, BUFFER_SIZE, " 10") : snprintf(response, BUFFER_SIZE, " %d", numberOfAnswers);
         write(fd, response, strlen(response));
     }
 
     else {
-        snprintf(response, BUFFER_SIZE, "QGR %d %ld %s 0 %d", qUserId, qsize, qdata, numberOfAnswers);
+        numberOfAnswers > 10 ? snprintf(response, BUFFER_SIZE, " 0 10") : snprintf(response, BUFFER_SIZE, " 0 %d", numberOfAnswers);
         write(fd, response, strlen(response));
     }
     free(qdata);
 
     /* Get the answers information */
-    for (int i = 1; (i <= numberOfAnswers) && (i <= DISPLAY_ANSWERS); i++) {
+    int firstAnswer = 1;
+    if (numberOfAnswers > 10) firstAnswer = numberOfAnswers - DISPLAY_ANSWERS + 1;
+    for (int i = firstAnswer; i <= numberOfAnswers; i++) {
         questionNumber = malloc(sizeof(char) * AN_SIZE);
-        i < 10 ? snprintf(questionNumber, AN_SIZE, "0%d", i) : snprintf(question, AN_SIZE, "%d", i);
+        i < 10 ? snprintf(questionNumber, AN_SIZE, "0%d", i) : snprintf(questionNumber, AN_SIZE, "%d", i);
         getAnswerInformation(path, question, questionNumber, fd);
         free(questionNumber);
     }
@@ -715,7 +714,10 @@ void getAnswerInformation(char *path, char *question, char *numb, int fd) {
     answerDesc = malloc(sizeof(char) * BUFFER_SIZE);
     snprintf(answerDesc, BUFFER_SIZE, "%s/%s_%s%s.txt", path, question, numb, QUESTIONS_DESC);
 
-    if (!(answerDescFd = fopen(answerDesc, "r"))) exit(EXIT_FAILURE);
+    if (!(answerDescFd = fopen(answerDesc, "r"))) {
+        printf("path: %s\nquestion: %s\n", answerDesc, question);
+        exit(EXIT_FAILURE);
+    }
 
     while ((nread = getline(&line, &len, answerDescFd)) != -1) {
         token = strtok(line, ":");
@@ -739,7 +741,10 @@ void getAnswerInformation(char *path, char *question, char *numb, int fd) {
     answerPath = malloc(sizeof(char) * BUFFER_SIZE);
     snprintf(answerPath, BUFFER_SIZE, "%s/%s_%s.txt", path, question, numb);
 
-    if (!(answerFd = fopen(answerPath, "r"))) exit(EXIT_FAILURE);
+    if (!(answerFd = fopen(answerPath, "r"))) {
+        printf("cheiguei2\n");
+        exit(EXIT_FAILURE);
+    }
 
     /* Get answer size */
     fseek(answerFd, 0L, SEEK_END);
@@ -768,7 +773,10 @@ void getAnswerInformation(char *path, char *question, char *numb, int fd) {
     if (aIMG) {
         imgPath = malloc(sizeof(char) * BUFFER_SIZE);
         snprintf(imgPath, BUFFER_SIZE, "%s/%s_%s.%s", path, question, numb, aiext);
-        if (!(imageFd = fopen(imgPath, "r"))) exit(EXIT_FAILURE);
+        if (!(imageFd = fopen(imgPath, "r"))) {
+            printf("cheiguei3\n");
+            exit(EXIT_FAILURE);
+        }
 
         /* Get image size */
         fseek(imageFd, 0L, SEEK_END);
@@ -831,36 +839,32 @@ char* listOfQuestions(char *topic) {
     return response;
 }
 
-char* submitAnswer(char* input, int sizeInput, int fd) {
-    int offset, asizeInt;
-    char *userID, *topic, *question, *asize, *inputAux, *aIMG;
-    char *iext = NULL, *isize = NULL, *idata = NULL, *dup_input;
+char* submitAnswer(char* input, int fd, int nMsg) {
+    int offset;
+    char *topic, *question;
+    int userId, asize, aIMG;
+    char *iext = NULL;
 
-    dup_input = strdup(input);
-
-    /* Check if command is ANS */
-    if (strcmp(strtok(dup_input, " "), "ANS")) return strdup("ERR\n");
+    topic = (char*) malloc(sizeof(char)* (TOPICNAME_SIZE+1));
+    question = (char*) malloc(sizeof(char)* (TOPICNAME_SIZE+1));
 
     /* Get arguments */
-    userID = strdup(strtok(NULL, " ")); topic = strdup(strtok(NULL, " "));
-    question = strdup(strtok(NULL, " ")); asize = strtok(NULL, " ");
+    sscanf(input, "%*s %d %s %s %d", &userId, topic, question, &asize);
 
-    DEBUG_PRINT("[ANS] Parsed argument userID: \"%s\"\n", userID);
+    DEBUG_PRINT("[ANS] Parsed argument userID: \"%d\"\n", userId);
     DEBUG_PRINT("[ANS] Parsed argument topic: \"%s\"\n", topic);
     DEBUG_PRINT("[ANS] Parsed argument question: \"%s\"\n", question);
-    DEBUG_PRINT("[ANS] Parsed argument asize: \"%s\"\n", asize);
-
-    asizeInt = atoi(asize);
+    DEBUG_PRINT("[ANS] Parsed argument asize: \"%d\"\n", asize);
 
     /* Check if topic exists */
     if (!isTopicInList(topic)) {
-        free(userID); free(topic); free(question);
+        free(topic); free(question);
         return strdup("ANR NOK\n");
     }
 
     /* Check if question exists */
-    int lenQuestionPath, numOfAnswers = -1, nMsg = 0;
-    long questionListOffset = 0, lineSize = 0;
+    int lenQuestionPath, numOfAnswers = -1;
+    long questionListOffset = 0;
     char *qUserCreated, *qImg, *qExt, *line = NULL, *numOfAnswersInput = NULL;
     char *questionPath, *questionAux, * response;
     size_t len = 0;
@@ -873,7 +877,7 @@ char* submitAnswer(char* input, int sizeInput, int fd) {
     snprintf(questionPath, lenQuestionPath, "%s%s%s", TOPIC_FOLDER, topic, QUESTIONS_LIST);
 
     if (!(questionListFP = fopen(questionPath, "r+"))) {
-        free(questionPath); free(userID); free(topic); free(question);
+        free(questionPath); free(topic); free(question);
         return strdup("ANR NOK\n");
     }
 
@@ -887,7 +891,6 @@ char* submitAnswer(char* input, int sizeInput, int fd) {
             qImg = strtok(NULL, ":");
             qExt = strtok(NULL, ":");
             numOfAnswers = atoi(numOfAnswersInput);
-            lineSize = ftell(questionListFP);
             break;
         }
         questionListOffset = ftell(questionListFP);
@@ -900,13 +903,13 @@ char* submitAnswer(char* input, int sizeInput, int fd) {
         fclose(questionListFP);
         free(questionPath);
         free(line);
-        free(userID); free(topic); free(question);
+        free(topic); free(question);
         return response;
     }
     numOfAnswers++;
 
     /* Prepare file pathname (example: question_56.txt\0). */
-    int isizeInt, lenAnswerDescPath, lenAnswerPath, lenAnswerImgPath, aIMGInt;
+    int isize = 0, lenAnswerDescPath, lenAnswerPath, lenAnswerImgPath;
     char *answerPath, *answerDescPath, *answerImgPath;
     FILE *answerDescFP;
 
@@ -914,34 +917,35 @@ char* submitAnswer(char* input, int sizeInput, int fd) {
     answerPath = (char*) malloc(sizeof(char) * lenAnswerPath);
     snprintf(answerPath, lenAnswerPath, "%s%s/%s_%02d.txt", TOPIC_FOLDER, topic, question, numOfAnswers);
 
-    offset = 3 + 1 + strlen(userID) + 1 + strlen(topic) + 1;
-    offset += strlen(question) + 1 + strlen(asize) + 1;
+    /* Prepare offset */
+    offset = 3 + 1 + lengthInt(userId) + 1 + strlen(topic) + 1;
+    offset += strlen(question) + 1 + lengthInt(asize) + 1;
 
     /* Receive and write text file */
     DEBUG_PRINT("[ANS] Parsed argument answerPath: \"%s\"\n", answerPath);
     DEBUG_PRINT("[ANS] Parsed argument input: \"%s\"\n", input);
     DEBUG_PRINT("[ANS] Parsed argument offset: \"%d\"\n", offset);
-    DEBUG_PRINT("[ANS] Parsed argument asizeInt: \"%d\"\n", asizeInt);
-    DEBUG_PRINT("[ANS] Writing answer to %s (size = %d)\n", answerPath, asizeInt);
+    DEBUG_PRINT("[ANS] Parsed argument asize: \"%d\"\n", asize);
+    DEBUG_PRINT("[ANS] Writing answer to %s (size = %d)\n", answerPath, asize);
     
-    if (recvTCPWriteFile(fd, answerPath, &input, BUFFER_SIZE, &offset, asizeInt) == -1)
+    if (recvTCPWriteFile(fd, answerPath, &input, &nMsg, BUFFER_SIZE, &offset, asize, DEBUG_TEST) == -1)
         printf("erro\n");
-    DEBUG_PRINT("[ANS] Finished writing file.\n");
-
-    /* Check if input has argument of aIMG */
-    if ((BUFFER_SIZE - offset) < 2){
-        read(fd, input, BUFFER_SIZE);
-        offset = BUFFER_SIZE - offset;
-    }
+    if (offset == 0) offset++;
+    DEBUG_PRINT("[ANS] Finished writing file.\n\n");
 
     /* Prepare for image */
-    dup_input = strdup(input);
-    aIMG = strtok(dup_input + offset, " ");
-    aIMGInt = 0;
-    if (!strcmp(strtok(aIMG, "\n"), "1")) {
-        iext = strtok(input + offset+1+strlen(aIMG), " ");
-        isize = strtok(input + offset+1+strlen(aIMG)+1+strlen(iext), " ");
-        aIMGInt = 1;
+    sscanf(input+offset, "%d", &aIMG);
+    offset += lengthInt(aIMG) + 1;
+
+    DEBUG_PRINT("[ANS] Has Image? %d\n", aIMG);
+    
+    if (aIMG) {
+        iext = (char*) malloc(sizeof(char)* (3+1)); iext[0] = '\0';
+        sscanf(input+offset, "%s %d", iext, &isize);
+        offset += strlen(iext) + 1 + lengthInt(isize) + 1;
+
+        DEBUG_PRINT("[ANS] Image ext:%s\n", iext);
+        DEBUG_PRINT("[ANS] Image size:%d\n", isize);
     }
 
     /* Write answer description (example: question_56_desc.txt\0). */
@@ -954,36 +958,38 @@ char* submitAnswer(char* input, int sizeInput, int fd) {
         free(questionPath);
         free(answerDescPath);
         free(line);
-        free(userID); free(topic); free(question);
+        free(topic); free(question);
         return strdup("ANR NOK\n");
     }
 
-    if (aIMGInt == 1) fprintf(answerDescFP, "%s:1:%s:", userID, iext);
-    else fprintf(answerDescFP, "%s:0:", userID);
+    if (aIMG) fprintf(answerDescFP, "%d:1:%s:", userId, iext);
+    else fprintf(answerDescFP, "%d:0:", userId);
     fclose(answerDescFP);
     free(answerDescPath);
 
     /* Check if there is an image */
-    if (aIMGInt == 1) {
+    if (aIMG) {
         if (!iext || !isize) {
             fclose(questionListFP);
             free(questionPath);
             free(line);
-            free(userID); free(topic); free(question);
+            free(topic); free(question);
+            free(iext);
             return strdup("ANR NOK\n");
         }
 
         /* Prepare image pathname (example: question_56.jpg\0). */
-        isizeInt = atoi(isize);
         lenAnswerImgPath = strlen(TOPIC_FOLDER) + strlen(topic) + 1 + strlen(question) + 1 + 2 + 1 + strlen(iext) + 1;
         answerImgPath = (char*) malloc(sizeof(char) * lenAnswerImgPath);
         snprintf(answerImgPath, lenAnswerImgPath, "%s%s/%s_%02d.%s", TOPIC_FOLDER, topic, question, numOfAnswers, iext);
 
         /* Receive and write image */
-        offset = offset + strlen(aIMG) + 1 + strlen(iext) + 1 + strlen(isize) + 1;
-        if (recvTCPWriteFile(fd, answerImgPath, &input, BUFFER_SIZE, &offset, isizeInt) == -1)
+        if (recvTCPWriteFile(fd, answerImgPath, &input, &nMsg, BUFFER_SIZE, &offset, isize, DEBUG_TEST) == -1)
             printf("erro\n");
+        if (offset == 0) offset++;
+
         free(answerImgPath);
+        free(iext);
     }
 
     /* Update number of answers */
@@ -995,67 +1001,6 @@ char* submitAnswer(char* input, int sizeInput, int fd) {
 
     /* Output to screen */
     printf("New answer (%s) received for %s/%s\n", answerPath, topic, question);
-    free(userID); free(topic); free(question);  free(answerPath);
+    free(topic); free(question);  free(answerPath);
     return strdup("ANR OK\n");
-}
-
-int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int bufferSize,
-    int *offset, int size) {
-
-    int sizeAux;
-    float percentage = 0.0;
-    char *buffer;
-    ssize_t nMsg = 0;
-    FILE *fp;
-
-    if (!(fp = fopen(filePath, "wb"))) return -1;
-    buffer = (char*) malloc(sizeof(char) * bufferSize);
-
-    DEBUG_PRINT("[RCVTCP] Offset: \"%d\"\n", *offset);
-    DEBUG_PRINT("[RCVTCP] Size: \"%d\"\n", size);
-
-    int toWrite = size;
-    if (toWrite <= (bufferSize - *offset)) {
-        /* Case #1: data completely fit the buffer. */
-        fwrite(*bufferAux + *offset, sizeof(char), toWrite, fp);
-        DEBUG_PRINT("Writing file to %s (%d%% complete)",
-            filePath, toWrite / size * 100);
-        *offset = *offset + toWrite + 1;
-        toWrite = 0;
-    }
-    else if (*offset < bufferSize) {
-        /* Case #2: the buffer didn't accommodate the full data,
-         * -------  there's still data to be read. */
-        fwrite(*bufferAux + *offset, sizeof(char), bufferSize - *offset, fp);
-        DEBUG_PRINT("Writing file to %s (%d%% complete)",
-            filePath, (bufferSize - *offset) / size * 100);
-        toWrite = toWrite - (bufferSize - *offset);
-    }
-
-    /* Receive the remaining portion of the data, if needed. */
-    while (toWrite > 0 && (nMsg = read(fd, buffer, 1)) > 0) {
-        fflush(stdout);
-        
-        sizeAux = (toWrite > nMsg) ? nMsg : toWrite;
-        fwrite(buffer, 1, sizeAux, fp);
-        percentage = (size - toWrite) * 1.0 / size * 100;
-        
-        DEBUG_PRINT("\rWriting file to %s (%.0f%% complete)", filePath, percentage);
-        
-        toWrite = toWrite - sizeAux;
-        if (toWrite <= 0) {
-            nMsg = read(fd, buffer, bufferSize);
-            *offset = 0;
-            break;
-        }
-        memset(buffer, 0, sizeof(buffer));
-        *offset = 0;
-    }
-    DEBUG_PRINT("\n");
-
-    /* Close file and return */
-    fclose(fp);
-    memcpy(*bufferAux, buffer, nMsg);
-    free(buffer);
-    return 0;
 }
