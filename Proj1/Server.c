@@ -604,7 +604,7 @@ char* questionGet(char *input, int fd) {
         printf("Could not open question %s description file.\n", question);
         free(path);
         free(topicFolderPath);
-        return;
+        return strdup("ERR\n");
     }
 
     while ((nread = getline(&line, &len, questionsFd)) != -1) {
