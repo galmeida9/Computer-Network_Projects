@@ -844,7 +844,7 @@ char* submitAnswer(char* input, int fd, int nMsg) {
     char *topic, *question;
     int userId, asize, aIMG;
     char *iext = NULL;
-
+    
     topic = (char*) malloc(sizeof(char)* (TOPICNAME_SIZE+1));
     question = (char*) malloc(sizeof(char)* (TOPICNAME_SIZE+1));
 
