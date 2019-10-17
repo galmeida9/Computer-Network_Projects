@@ -63,7 +63,7 @@ int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int *sizeMsg,
         memset(buffer, 0, sizeof(*buffer));
         *offset = 0;
     }
-    printf("\n");
+    printf("\rRetrieving file %s (100%% completed)\n", filePath);
 
     /* Close file and return */
     fclose(fp);
