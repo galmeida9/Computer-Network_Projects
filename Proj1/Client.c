@@ -108,8 +108,8 @@ void SendMessageTCP(char *message, int *fd, struct addrinfo **res) {
         exit(2);
     }
 
-    if ((connect(*fd, (*res)->ai_addr, (*res)->ai_addrlen)) == -1) exit(1);
-    if ((write(*fd, message, strlen(message))) == -1) exit(1);
+    if ((connect(*fd, (*res)->ai_addr, (*res)->ai_addrlen)) == -1) exit(EXIT_FAILURE);
+    if ((write(*fd, message, strlen(message))) == -1) exit(EXIT_FAILURE);
 }
 
 char* receiveMessageTCP(int fd) {
@@ -421,8 +421,12 @@ int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen,
     questionList = receiveMessageUDP(fd, addrlen, addr);
     response = strdup(questionList);
 
-    if (!strcmp(response,"ERR") 
-        || !strcmp(response, "\0") 
+    if (!strcmp(response, "\0")) {
+        /* Communication timed out */
+        free(response);
+        return -1;
+    }
+    else if (!strcmp(response, "ERR")
         || !strcmp(strtok(response, " "), "LQR ")) {
         printf("Failed to process your request\n");
         free(response);
@@ -705,7 +709,7 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     long qsize = 0, qisize, asize, aisize;
     char qiext[3], aiext[3], *path, *directory, *AN, *reply;
 
-    if (!(reply = (char * ) calloc(BUFFER_SIZE + 1, sizeof(char)))) return;
+    reply = calloc(BUFFER_SIZE + 1, sizeof(char));
     while ((nMsg = read(fd, reply, BUFFER_SIZE)) <= 0);
 
     if (!strcmp(reply, "QGR EOF\n") || !strcmp(reply, "QGR ERR\n")) {
@@ -862,7 +866,6 @@ void questionGet(char *topic, char *questionChosen, int fd) {
             
             if (recvTCPWriteFile(fd, path, &reply, &nMsg, BUFFER_SIZE, &offset, aisize, DEBUG_TEST) == -1)
                 printf("Unable to write answer image file\n");
-
             if (offset == 0) offset++;
         }
 
