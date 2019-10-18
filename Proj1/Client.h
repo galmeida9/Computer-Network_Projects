@@ -29,7 +29,11 @@ void SendMessageTCP(char *message, int *fd, struct addrinfo **res);
 char* receiveMessageTCP(int fd);
 void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP, struct addrinfo *resTCP, socklen_t addrlen, struct sockaddr_in addr);
 int registerNewUser(int id, int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr);
+<<<<<<< HEAD
 void questionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char **topics, int *numTopics);
+=======
+void topicList(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char **topics, int *numTopics);
+>>>>>>> master
 void freeTopics(int numTopics, char **topics);
 char* topicSelectNum(int numTopics, char **topics, int topicChosen);
 char* topicSelectName(int numTopics, char **topics, char *name);
