@@ -743,7 +743,7 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     }
 
     if (recvTCPWriteFile(fd, path, &reply, &nMsg, BUFFER_SIZE, &offset, qsize, DEBUG_TEST) == -1)
-        printf("Erro ao escrever o ficheiro da pergunta\n");
+        printf("Error writing the question file.\n");
     if (offset == 0) offset++;
 
     if (offset != 0 && offset >= nMsg) {
@@ -771,7 +771,7 @@ void questionGet(char *topic, char *questionChosen, int fd) {
         offset += lengthInt(qisize) + 1;
 
         if (recvTCPWriteFile(fd, path, &reply, &nMsg, BUFFER_SIZE, &offset, qisize, DEBUG_TEST) == -1)
-            printf("Erro ao escrever a imagem da pergunta\n");
+            printf("Error writing the question image\n");
         if (offset == 0) offset++;
     }
 
@@ -833,7 +833,7 @@ void questionGet(char *topic, char *questionChosen, int fd) {
         sprintf(path, "client/%s/%s_%s.txt", topic, questionChosen, AN);
         
         if (recvTCPWriteFile(fd, path, &reply, &nMsg, BUFFER_SIZE, &offset, asize, DEBUG_TEST) == -1)
-            printf("Erro ao escrever o ficheiro da pergunta\n");
+            printf("Error writing the answer file.\n");
         if (offset == 0) offset++;
 
         if (offset != 0 && offset >= nMsg) {
@@ -862,7 +862,7 @@ void questionGet(char *topic, char *questionChosen, int fd) {
             sprintf(path, "client/%s/%s_%s.%s", topic, questionChosen, AN, aiext);
             
             if (recvTCPWriteFile(fd, path, &reply, &nMsg, BUFFER_SIZE, &offset, aisize, DEBUG_TEST) == -1)
-                printf("Erro ao escrever o ficheiro da pergunta\n");
+                printf("Error writing the answer image.\n");
 
             if (offset == 0) offset++;
         }
