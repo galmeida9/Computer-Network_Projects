@@ -9,13 +9,8 @@
 #ifndef UTILITY_H
 #define UTILITY_H
 
-#include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-
 #define BUFFER_SIZE 2048
+#define DEFAULT_PORT "58013"
 #define ID_SIZE 5
 
 #define DEBUG_PRINT(fmt, args...) \
@@ -25,5 +20,6 @@ int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int *sizeMsg,
     int bufferSize, int *offset, int size, int DEBUG_TEST);
 
 int lengthInt(int x);
+char** arrayInit(int len);
 
 #endif /* UTILITY_H */

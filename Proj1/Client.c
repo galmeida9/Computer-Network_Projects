@@ -1,58 +1,10 @@
-//TODO re-calculate malloc sizes, its > than BUFFER_SIZE sometimes
-//TODO timeout handle
-//TODO remove malloc casts
-//TODO remove floor log10
-//TODO change macro to satisfy -pedantic
-
-#include <arpa/inet.h>
-#include <assert.h>
-#include <errno.h>
-#include <math.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include "lib/utility.h"
-
-#define DEFAULT_PORT "58013"
-#define LEN_COMMAND 3
-#define LEN_TOPIC 10
-#define NUM_QUESTIONS 99
-#define NUM_TOPICS 99
-#define REGISTER_SIZE 12
-
-void parseArgs(int number, char **arguments, char **port, char **ip);
-void connectToServer(int *udp_fd, int *tcp_fd, char *ip, char *port, struct addrinfo hints, struct addrinfo **resUDP, struct addrinfo **resTCP);
-void SendMessageUDP(char *message, int fd, struct addrinfo *res);
-char* receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr);
-void SendMessageTCP(char *message, int *fd, struct addrinfo **res);
-char* receiveMessageTCP(int fd);
-void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP, struct addrinfo *resTCP, socklen_t addrlen, struct sockaddr_in addr);
-int registerNewUser(int id, int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr);
-void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char **topics, int *numTopics);
-void freeTopics(int numTopics, char **topics);
-char* topicSelectNum(int numTopics, char **topics, int topicChosen);
-char* topicSelectName(int numTopics, char **topics, char *name);
-int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char *topicChosen, char **questions);
-void freeQuestions(int numQuestions, char **questions);
-void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen, char *questionChosen, char *text_file, char *img_file);
-char* questionSelectNum(int question, int num_questions, char **questions);
-void questionGet(char *topic, char *questionChosen, int fd);
-char* questionSelectName(char *name, int num_questions, char **questions);
-void submitQuestion(int fd, struct addrinfo **res, int aUserID, char *topicChosen, char *question, char *text_file, char *img_file);
-void handleTimeout(int sig);
+#include "Client.h"
 
 int DEBUG_TEST = 0;
 char *buffer;
 
 int main(int argc, char **argv) {
-    int *udp_fd = malloc(sizeof(int)), *tcp_fd = malloc(sizeof(int));
+    int udp_fd = -1, tcp_fd = -1, userId = -1;
     char *ip, *port;
     struct addrinfo hints, *resUDP, *resTCP;
     struct sockaddr_in addr;
@@ -62,62 +14,26 @@ int main(int argc, char **argv) {
 
     port = strdup(DEFAULT_PORT);
     ip = strdup("127.0.0.1");
-    parseArgs(argc, argv, &port, &ip);
+    parseArguments(argc, &DEBUG_TEST, argv, &port, &ip);
     printf("Connected to %s:%s\n", ip, port);
+    printf("Enter 'help' for available commands\n\n");
 
-    *udp_fd = -1; *tcp_fd = -1;
-    connectToServer(udp_fd, tcp_fd, ip, port, hints, &resUDP, &resTCP);
+    connectToServer(&udp_fd, &tcp_fd, ip, port, hints, &resUDP, &resTCP);
+    parseCommands(&userId, udp_fd, tcp_fd, resUDP, resTCP, addrlen, addr);
 
-    int userId = -1;
-    parseCommands(&userId, *udp_fd, *tcp_fd, resUDP, resTCP, addrlen, addr);
-
-    free(buffer);
-    freeaddrinfo(resTCP);
-    freeaddrinfo(resUDP);
-    close(*udp_fd);
-    free(udp_fd);
-    free(tcp_fd);
     free(ip);
     free(port);
+    free(buffer);
+    close(udp_fd);
+    freeaddrinfo(resTCP);
+    freeaddrinfo(resUDP);
     return 0;
-}
-
-void parseArgs(int number, char** arguments, char **port, char **ip) {
-    int opt;
-
-    while((opt = getopt(number, arguments, "n:p:d")) != -1) {
-        switch(opt) {
-            case 'n':
-                if (optarg == NULL || strcmp(optarg, "-p") == 0) {
-                    printf("The IP is missing.\n");
-                    exit(1);
-                }
-
-                /* Discard default ip previously saved */
-                free(*ip); 
-                *ip = strdup(optarg);
-                break;
-            case 'p':
-                if (optarg == NULL || strcmp(optarg, "-n") == 0) {
-                    printf("The port is missing.\n");
-                    exit(1);
-                }
-
-                /* Discard default port previously saved */
-                free(*port);
-                *port = strdup(optarg);
-                break;
-            case 'd':
-                DEBUG_TEST = 1;
-        }
-    }
 }
 
 void connectToServer(int *udp_fd, int *tcp_fd, char *ip, char *port, 
     struct addrinfo hints, struct addrinfo **resUDP, struct addrinfo **resTCP) {
 
     struct timeval tv = { 5, 0 };
-    ssize_t n;
     memset(&hints,0, sizeof(hints));
     hints.ai_family=AF_INET;
     hints.ai_flags=AI_NUMERICSERV;
@@ -125,8 +41,7 @@ void connectToServer(int *udp_fd, int *tcp_fd, char *ip, char *port,
     /* UDP Connection */
     if (*udp_fd < 0) {
         hints.ai_socktype=SOCK_DGRAM;
-        n = getaddrinfo(ip, port, &hints, resUDP);
-        if (n != 0) exit(1);
+        if (getaddrinfo(ip, port, &hints, resUDP)) exit(1);
 
         if ((*udp_fd = socket(
             (*resUDP)->ai_family, 
@@ -139,17 +54,16 @@ void connectToServer(int *udp_fd, int *tcp_fd, char *ip, char *port,
             *udp_fd, SOL_SOCKET, SO_RCVTIMEO, 
             (struct timeval *)&tv, sizeof(struct timeval))) {
             
-            printf("[Error] Failed to execute setsockopt for UDP.\n");
+            printf("Failed to set a timeout for the UDP socket\n");
             close(*udp_fd);
             exit(2);
         }
     }
 
     /* TCP Connection */
-    if (*tcp_fd < 0){
-        hints.ai_socktype=SOCK_STREAM;
-        n = getaddrinfo(ip, port, &hints, resTCP);
-        if (n != 0) exit(1);
+    if (*tcp_fd < 0) {
+        hints.ai_socktype = SOCK_STREAM;
+        if (getaddrinfo(ip, port, &hints, resTCP)) exit(1);
     }
 }
 
@@ -160,7 +74,7 @@ void SendMessageUDP(char *message, int fd, struct addrinfo *res) {
     if (n == -1) exit(1);
 }
 
-char *receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr) {
+char* receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr) {
     ssize_t n;
     addrlen = sizeof(addr);
     buffer[0] = '\0';
@@ -170,200 +84,78 @@ char *receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr) {
         if (n == -1) {
             if ((errno != EAGAIN) && (errno != EWOULDBLOCK))
                 exit(1);
-            printf("[Info] The operation has timed out.\n");
             break;
         }
     }
 
-    /* DEBUG_PRINT("[UDP] Received: |%s|\n", buffer); */
     return buffer;
 }
 
 void SendMessageTCP(char *message, int *fd, struct addrinfo **res) {
     struct timeval tv = { 5, 0 };
-    ssize_t n;
 
     *fd = socket((*res)->ai_family, (*res)->ai_socktype, (*res)->ai_protocol);
     if (*fd == -1) exit(1);
-    // Setting TCP socket timeout value
-    if(setsockopt(*fd, SOL_SOCKET, SO_RCVTIMEO,(struct timeval *)&tv,sizeof(struct timeval))) {
-        printf("setsockopt TCP failed\n");
+
+    /* Setting TCP socket timeout value */
+    if (setsockopt(
+        *fd, SOL_SOCKET, SO_RCVTIMEO,
+        (struct timeval *)&tv, sizeof(struct timeval))) {
+
+        printf("Failed to set a timeout for the TCP socket\n");
         close(*fd);
         exit(2);
     }
 
-    n = connect(*fd, (*res)->ai_addr, (*res)->ai_addrlen);
-    if (n == -1) exit(1);
-
-    n = write(*fd, message, strlen(message));
-    if (n == -1) exit(1);
+    if ((connect(*fd, (*res)->ai_addr, (*res)->ai_addrlen)) == -1) exit(1);
+    if ((write(*fd, message, strlen(message))) == -1) exit(1);
 }
 
-char* receiveMessageTCP(int fd) {
-    ssize_t n;
-    //memset(buffer, 0, BUFFER_SIZE);
+char *receiveMessageTCP(int fd) {
     buffer[0] = '\0';
 
-    n = read(fd, buffer, BUFFER_SIZE);
-    if (n == -1) {
+    if ((read(fd, buffer, BUFFER_SIZE)) == -1) {
         if ((errno != EAGAIN) && (errno != EWOULDBLOCK))
             exit(1);
-        printf("[Info] The operation has timed out.\n");
+        printf("Communication error\n");
     }
 
-    /* DEBUG_PRINT("[TCP] Received: |%s|\n", buffer); */
     return buffer;
 }
 
 void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP, 
     struct addrinfo *resTCP, socklen_t addrlen, struct sockaddr_in addr) {
-    int ans, numTopics = -1, numQuestions = -1;
-    char * status, msg[21];
-    char *line = NULL, *command;
-    char ** topics = malloc(sizeof(char*)*NUM_TOPICS), ** questions = malloc(sizeof(char*)*NUM_QUESTIONS);
-    char * topicChosen = NULL, * questionChosen = NULL;
-    char *answerPath, *answerImg;
+    
+    int numTopics = -1, numQuestions = -1;
+    int command_type, topicChosenNum, question, ans;
+    char *text_file = NULL, *img_file = NULL, *line = NULL;
+    char *response, *command, *answerPath, *answerImg, *arg, msg[21];
+    char **topics, **questions, *topicChosen = NULL, *questionChosen = NULL;
     size_t size = 0;
+
+    topics = arrayInit(NUM_TOPICS);
+    questions = arrayInit(NUM_QUESTIONS);
 
     while(1) {
         memset(buffer, 0, sizeof(*buffer));
         getline(&line, &size, stdin);
         command = strtok(line, " ");
 
-        if (strcmp(command, "register") == 0 || strcmp(command, "reg") == 0) {
-            command = strtok(NULL, " ");
-            if (command != NULL && strlen(command) == ID_SIZE + 1) {
+        if (!strcmp(command, "register") || !strcmp(command, "reg")) {
+            if ((command = strtok(NULL, " ")) && strlen(command) == ID_SIZE + 1) {
                 *userId = atoi(strtok(command, "\n"));
                 
                 if (strtok(NULL, " ") != NULL  || *userId == 0)
-                    printf("Invalid command.\n");
-                else  if (!(ans = registerNewUser(*userId, udp_fd, resUDP, 
-                    addrlen, addr))) 
+                    printf("Invalid command\n");
+                else  if (!(ans = registerNewUser(
+                    *userId, udp_fd, resUDP, addrlen, addr))) 
                     *userId = -1;
             }
-            else {
-                printf("Invalid command.\n");
-            }
+            else
+                printf("Invalid command\n");
         }
 
-        else if ((strcmp(command, "topic_list\n") == 0
-            || strcmp(command, "tl\n") == 0) && *userId > 0)
-            requestLTP(udp_fd, resUDP, addrlen, addr, topics, &numTopics);
-
-        else if ((strcmp(command, "ts") == 0) && *userId != -1){
-            int topicChosenNum;
-            char *arg;
-            command = strtok(NULL, " ");
-            if (command != NULL) {
-                arg = strtok(command, "\n");
-                if (strtok(NULL, " ") != NULL || arg == NULL)
-                    printf("Invalid command.\n");
-                else {
-                    topicChosenNum = atoi(arg);
-                    topicChosen = topicSelectNum(numTopics, topics, topicChosenNum);
-                }
-            }
-        }
-
-        else if ((strcmp(command, "topic_select") == 0) && *userId > 0) {
-            char *arg;
-            command = strtok(NULL, " ");
-            if (command != NULL){
-                arg = strtok(command, "\n");
-                if (strtok(NULL, " ") != NULL || arg == NULL)
-                    printf("Invalid command.\n");
-                else {
-                    topicChosen = topicSelectName(numTopics, topics, arg);
-                }
-            }
-        }
-
-        else if (!strcmp(command, "tp") || !strcmp(command, "topic_propose")) {
-            sprintf(msg, "PTP %d %s", *userId, strtok(NULL, " "));
-            SendMessageUDP(msg, udp_fd, resUDP);
-
-            DEBUG_PRINT("[PTP] Sent: \"%s\"\n", msg);
-            status = receiveMessageUDP(udp_fd, addrlen, addr);
-            DEBUG_PRINT("[PTP] Received: \"%s\"\n", status);
-
-            if (!strcmp(status, "PTR OK"))
-                printf("Topic accepted!\n");
-            else if (!strcmp(status, "PTR DUP"))
-                printf("Could not register topic, topic already exists.\n");
-            else if (!strcmp(status, "PTR FUL"))
-                printf("Could not register topic, topic list is already full.\n");
-            else if (!strcmp(status, "PTR NOK"))
-                printf("Failed to process your request.\n");
-        }
-
-        else if ((strcmp(command, "question_list\n") == 0 
-                || strcmp(command, "ql\n") == 0) && *userId > 0) {
-            
-            numQuestions = getQuestionList(udp_fd, resUDP, addrlen, addr, 
-                topicChosen, questions);
-        }
-
-        else if ((strcmp(command, "qg") == 0) && *userId > 0) {
-            int question;
-            char * arg;
-            command = strtok(NULL, " ");
-
-            if (command) {
-                arg = strtok(command, "\n");
-                if (strtok(NULL, " ") != NULL || arg == NULL)
-                    printf("Invalid command.\n");
-                else {
-                    question = atoi(arg);
-                    questionChosen = questionSelectNum(question, numQuestions, questions);
-
-                    if (questionChosen) {
-                        sprintf(msg, "GQU %s %s\n", topicChosen, questionChosen);
-                        SendMessageTCP(msg, &tcp_fd, &resTCP);
-                        questionGet(topicChosen, questionChosen, tcp_fd);
-                        close(tcp_fd);
-                    }
-                }
-            }
-        }
-
-        else if ((strcmp(command, "question_get") == 0) && *userId > 0) {
-            char *arg;
-            command = strtok(NULL, " ");
-
-            if (command){
-                arg = strtok(command, "\n");
-                if (strtok(NULL, " ") != NULL || arg == NULL)
-                    printf("Invalid command.\n");
-                else {
-                    questionChosen = questionSelectName(arg, numQuestions, questions);
-
-                    if (questionChosen) {
-                        sprintf(msg, "GQU %s %s\n", topicChosen, questionChosen);
-                        SendMessageTCP(msg, &tcp_fd, &resTCP);
-                        questionGet(topicChosen, questionChosen, tcp_fd);
-                        close(tcp_fd);
-                    }
-                }
-            }
-        }
-
-        else if ((strcmp(command, "question_submit") == 0 || strcmp(command, "qs") == 0) && *userId > 0) {
-            char *text_file = NULL, *img_file = NULL;
-            command = strtok(NULL, "\n");
-            questionChosen = strtok(command, " ");
-            text_file = strtok(NULL, " ");
-            img_file = strtok(NULL, "\n");
-            if (questionChosen == NULL || text_file == NULL) printf("Invalid arguments.\n");
-            else submitQuestion(tcp_fd, &resTCP, *userId, topicChosen, questionChosen, text_file, img_file);
-        }
-
-        else if (((strcmp(command, "as") == 0) || (strcmp(command, "answer_submit") == 0)) && *userId > 0) {
-            answerPath = strtok(NULL, " ");
-            answerImg = strtok(NULL, " ");
-            answerSubmit(tcp_fd, &resTCP, *userId, topicChosen, questionChosen, strtok(answerPath, "\n"), answerImg);
-        }
-
-        else if (strcmp(line, "help\n") == 0) {
+        else if (!strcmp(line, "help\n")) {
             printf("\n");
             printf("reg (id)\t- sign in\n");
             printf("tl\t\t- list topics\n");
@@ -373,16 +165,121 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             printf("exit\t\t- exit program\n");
         }
 
-        else if (strcmp(line, "exit\n") == 0) {
+        else if (!strcmp(line, "exit\n")) {
             freeQuestions(numQuestions, questions);
             freeTopics(numTopics, topics);
-            free(line);
             free(topicChosen);
+            free(questions);
+            free(line);
             return;
         }
 
-        else *userId <= 0 ? printf("You need to register first before performing any commands.\n") : printf("Invalid command.\n");
+        /* Register is yet to be made, can't go past this point then... */
+        else if (*userId <= 0) {
+            printf("You need to register first before performing any commands\n");
+            continue;
+        }
 
+        else if (!strcmp(command, "tl\n") || !strcmp(command, "topic_list\n")) {
+            questionList(udp_fd, resUDP, addrlen, addr, topics, &numTopics);
+        }
+
+        else if (!strcmp(command, "ts") || !strcmp(command, "topic_select")) {
+            command_type = !strcmp(command, "ts") ? 0 : 1;
+
+            if (topicChosen != NULL)
+                free(topicChosen);
+
+            if ((command = strtok(NULL, " "))) {
+                arg = strtok(command, "\n");
+                if (strtok(NULL, " ") != NULL || arg == NULL)
+                    printf("Invalid command\n");
+                else if (command_type) {
+                    topicChosen = topicSelectName(numTopics, topics, arg);
+                }
+                else {
+                    topicChosenNum = atoi(arg);
+                    topicChosen = topicSelectNum(numTopics, topics, topicChosenNum);
+                }
+            }
+        }
+
+        else if (!strcmp(command, "tp") || !strcmp(command, "topic_propose")) {
+            char *topic = strtok(NULL, "\n");
+            sprintf(msg, "PTP %d %s\n", *userId, topic);
+            SendMessageUDP(msg, udp_fd, resUDP);
+
+            response = receiveMessageUDP(udp_fd, addrlen, addr);
+
+            if (!strcmp(response, "PTR OK")) {
+                printf("Topic accepted!\n");
+                topicChosen = strdup(topic);
+            }
+            else if (!strcmp(response, "\0"))
+                printf("Communication error\n");
+            else if (!strcmp(response, "PTR DUP"))
+                printf("Could not register topic, topic already exists\n");
+            else if (!strcmp(response, "PTR FUL"))
+                printf("Could not register topic, topic list is already full\n");
+            else if (!strcmp(response, "PTR NOK"))
+                printf("Failed to process your request\n");
+        }
+
+        else if (!strcmp(command, "ql\n") || !strcmp(command, "question_list\n")) {
+            freeQuestions(numQuestions, questions);
+            numQuestions = getQuestionList(udp_fd, resUDP, addrlen, addr, 
+                topicChosen, questions);
+        }
+
+        else if (!strcmp(command, "qg") || !strcmp(command, "question_get")) {
+            command_type = !strcmp(command, "qg") ? 0 : 1;
+
+            if ((command = strtok(NULL, " "))) {
+                arg = strtok(command, "\n");
+                
+                if (strtok(NULL, " ") != NULL || arg == NULL)
+                    printf("Invalid command\n");
+                else {
+                    if (command_type)
+                        questionChosen = questionSelectName(
+                            arg, numQuestions, questions);
+                    else {
+                        question = atoi(arg);
+                        questionChosen = questionSelectNum(
+                            question, numQuestions, questions);
+                    }   
+                    
+                    if (questionChosen) {
+                        sprintf(msg, "GQU %s %s\n", topicChosen, questionChosen);
+                        SendMessageTCP(msg, &tcp_fd, &resTCP);
+                        questionGet(topicChosen, questionChosen, tcp_fd);
+                        close(tcp_fd);
+                    }
+                }
+            }
+        }
+
+        else if (!strcmp(command, "qs") || !strcmp(command, "question_submit")) {
+            command = strtok(NULL, "\n");
+            questionChosen = strtok(command, " ");
+            text_file = strtok(NULL, " ");
+            img_file = strtok(NULL, "\n");
+           
+            if (questionChosen == NULL || text_file == NULL)
+                printf("Invalid arguments\n");
+            else submitQuestion(tcp_fd, &resTCP, *userId, topicChosen, 
+                questionChosen, text_file, img_file);
+        }
+
+        else if ((!strcmp(command, "as") || !strcmp(command, "answer_submit"))) {
+            answerPath = strtok(NULL, " ");
+            answerImg = strtok(NULL, " ");
+            answerSubmit(tcp_fd, &resTCP, *userId, topicChosen, questionChosen, 
+                strtok(answerPath, "\n"), answerImg);
+        }
+
+        else 
+            printf("Invalid command\n");
         printf("\n");
     }
 }
@@ -397,15 +294,19 @@ int registerNewUser(int id, int fd, struct addrinfo *res, socklen_t addrlen,
 
     response = receiveMessageUDP(fd, addrlen, addr);
     if (!strcmp(response, "\0")) {
-        printf("[Error] Failed to process your request.\n");
+        /* Communication timed out */
+        printf("Communication error\n");
         return 0;
     }
 
-    strcmp(response, "RGR OK") ==  0 ? printf("User \"%d\" registered\n", id) : printf("Could not register user, invalid user ID.\n");
+    !strcmp(response, "RGR OK")
+    ? printf("User \"%d\" registered\n", id)
+    : printf("Could not register user, invalid user ID\n");
     return !strcmp(response, "RGR OK");
 }
 
-void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char** topics, int* numTopics) {
+void questionList(int fd, struct addrinfo *res, socklen_t addrlen, 
+    struct sockaddr_in addr, char** topics, int* numTopics) {
     int i = 1, N, offset, user;
     char *iter, *ltr, *name, *sep;
 
@@ -413,12 +314,12 @@ void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr
     ltr = receiveMessageUDP(fd, addrlen, addr);
 
     if (!strcmp(ltr, "\0") || strcmp(strtok(ltr, " "), "LTR")) {
-        printf("[Error] Failed to process your request.\n");
+        printf("Communication error\n");
         return;
     }
 
     N = atoi(strtok(NULL, " "));
-    printf("available topics:\n");
+    printf("Listing topics:\n");
     while (i <= N) {
         iter = strtok(NULL, " ");
 
@@ -430,8 +331,10 @@ void requestLTP(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr
         name[offset] = '\0';
         user = atoi(iter + offset + 1);
 
-        topics[i-1] = strdup(iter);
-        printf("%d - %s (proposed by %d)\n", i++, name, user);
+        if (topics[i - 1] != NULL)
+            free(topics[i - 1]);
+        topics[i - 1] = strdup(iter);
+        printf("Topic %2d - %s (proposed by %d)\n", i++, name, user);
 
         free(name);
     }
@@ -445,20 +348,27 @@ void freeTopics(int numTopics, char **topics) {
     free(topics);
 }
 
-char* topicSelectNum(int numTopics, char** topics, int topicChosen){
-    if (numTopics == -1){
-        printf("Run tl first.\n");
+void freeQuestions(int numQuestions, char** questions){
+    for (int i = 0; i < numQuestions; i++) {
+        free(questions[i]);
+        questions[i] = NULL;
+    }
+}
+
+char* topicSelectNum(int numTopics, char** topics, int topicChosen) {
+    if (numTopics == -1) {
+        printf("Topic list not available\n");
         return NULL;
     }
-    else if (topicChosen > numTopics || topicChosen <= 0){
-        printf("Invalid topic number.\n");
+    else if (topicChosen > numTopics || topicChosen <= 0) {
+        printf("Invalid topic number\n");
         return NULL;
     }
 
-    char *topicInfo = strdup(topics[topicChosen-1]);
+    char *topicInfo = strdup(topics[topicChosen - 1]);
     char *topic = strdup(strtok(topicInfo, ":"));
     char *userId = strdup(strtok(NULL, ":"));
-    printf("selected topic: %s (%s)\n", topic, userId);
+    printf("Selecting topic: %s (%s)\n", topic, userId);
     free(topicInfo);
     free(userId);
     return topic;
@@ -470,7 +380,7 @@ char* topicSelectName(int numTopics, char** topics, char* name){
     int i;
 
     if (numTopics == -1){
-        printf("Run tl first.\n");
+        printf("Topic list not available\n");
         return NULL;
     }
 
@@ -485,16 +395,25 @@ char* topicSelectName(int numTopics, char** topics, char* name){
         }
     }
 
-    topic == NULL ? printf("Can't find that topic.\n") : printf("selected topic: %s (%s)\n", topic, userId);
+    !topic 
+    ? printf("Can't find that topic\n") 
+    : printf("Selecting topic: %s (%s)\n", topic, userId);
+    
     free(userId);
     return topic;
 }
 
-int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char* topicChosen, char** questions){
+void topicPropose() {
+
+}
+
+int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, 
+    struct sockaddr_in addr, char* topicChosen, char** questions) {
+
     int i = 0, lenMsg = LEN_COMMAND + 1 + LEN_TOPIC + 1 + 1, numQuestions = 0;
     char *iter, *message, *questionList, *response;
 
-    if (topicChosen == NULL) { printf("Select your topic first.\n"); return -1; }
+    if (topicChosen == NULL) { printf("Select your topic first\n"); return -1; }
 
     message = malloc(sizeof(char) * lenMsg);
     snprintf(message, lenMsg, "LQU %s\n", topicChosen);
@@ -507,7 +426,7 @@ int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sock
     if (!strcmp(response,"ERR") 
         || !strcmp(response, "\0") 
         || !strcmp(strtok(response, " "), "LQR ")) {
-        printf("[Error] Failed to process your request.\n");
+        printf("Failed to process your request\n");
         free(response);
         return -1;
     }
@@ -519,23 +438,18 @@ int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sock
         return -1;
     }
 
-    printf("Available questions about %s:\n", topicChosen);
+    printf("Listing questions for topic %s:\n", topicChosen);
+
     while ((iter = strtok(NULL, " \n")))
         questions[i++] = strdup(iter);
-
+        
     for (i = 0; i < numQuestions; i++) {
         questions[i] = strtok(questions[i], ":");
-        printf("%d - %s\n", i + 1, questions[i]);
+        printf("Question %2d - %s\n", i + 1, questions[i]);
     }
 
     free(response);
     return numQuestions;
-}
-
-void freeQuestions(int numQuestions, char** questions){
-    int i;
-    for (i=0; i<numQuestions; i++) free(questions[i]);
-    free(questions);
 }
 
 void submitQuestion(int fd, struct addrinfo **res, int aUserID, 
@@ -545,7 +459,7 @@ void submitQuestion(int fd, struct addrinfo **res, int aUserID,
     FILE *questionFd;
 
     if (strlen(question) > 10) {
-        printf("[Error] Question is too big.\n");
+        printf("Question name is too long\n");
         return;
     }
 
@@ -558,32 +472,32 @@ void submitQuestion(int fd, struct addrinfo **res, int aUserID,
     questionFd = fopen(textPath, "r");
     free(textPath);
     if (questionFd == NULL) {
-        printf("Can't find file.\n");
+        printf("Can't find file\n");
         return;
     }
 
     if (img_file != NULL) {
         FILE *imageFd = fopen(img_file, "rb");
         if (imageFd == NULL) {
-            printf("Can't find image file.\n");
+            printf("Can't find image file\n");
             return;
         }
         fclose(imageFd);
     }
 
-    //Get size of file
+    /* Get size of file */
     fseek(questionFd, 0L, SEEK_END);
     qsize = ftell(questionFd);
     fseek(questionFd, 0L, SEEK_SET);
 
-    // Send information
-    int request_len = 3 + 1 + 5 + 1 + strlen(topicChosen) + 1 + strlen(question) + 1 + floor(log10(abs(qsize))) + 3;
+    /* Send information */
+    int request_len = 3 + 1 + 5 + 1 + strlen(topicChosen) + 1 + strlen(question) + 1 + lengthInt(qsize) + 2;
     char *request = malloc(sizeof(char) * request_len);
     snprintf(request, request_len, "QUS %d %s %s %ld ", aUserID, topicChosen, question, qsize);
     DEBUG_PRINT("[QUS] Sending request: %s\n", request);
     SendMessageTCP(request, &fd, res);
 
-    //Send file data
+    /* Send file data */
     qdata = (char*) malloc(sizeof(char) * BUFFER_SIZE);
     int sizeAux = qsize;
 
@@ -596,19 +510,19 @@ void submitQuestion(int fd, struct addrinfo **res, int aUserID,
     fclose(questionFd);
     free(qdata);
 
-    /*Get the question's image information*/
+    /* Get the question's image information */
     long aisize;
     char *aidata;
     if (img_file != NULL) {
         FILE *imageFd;
         imageFd = fopen(img_file, "rb");
         if (imageFd == NULL) {
-            printf("Can't find image file.\n");
+            printf("Can't find image file\n");
             free(request);
             return;
         }
 
-        //Get image size
+        /* Get image size */
         fseek(imageFd, 0L, SEEK_END);
         aisize = ftell(imageFd);
         fseek(imageFd, 0L, SEEK_SET);
@@ -616,11 +530,11 @@ void submitQuestion(int fd, struct addrinfo **res, int aUserID,
         char *aiext = strtok(img_file, ".");
         aiext = strtok(NULL, ".");
 
-        //Send image information
+        /* Send image information */
         snprintf(request, BUFFER_SIZE, " 1 %s %ld ", aiext, aisize);
         write(fd, request, strlen(request));
 
-        //Send image data
+        /* Send image data */
         aidata = (char*) malloc(sizeof(char) * BUFFER_SIZE);
         int sizeAux = aisize;
 
@@ -631,39 +545,45 @@ void submitQuestion(int fd, struct addrinfo **res, int aUserID,
         }
 
         write(fd, "\n", strlen("\n"));
-
         fclose(imageFd);
         free(aidata);
     }
-
     else {
         write(fd, " 0\n", 3);
     }
-
     free(request);
 
     char* reply = strtok(receiveMessageTCP(fd), "\n");
-
     DEBUG_PRINT("[QUS] Received reply: \"%s\"\n", reply);
 
     if (!strcmp(reply, "QUR OK")) printf("Question submitted with success\n");
-    else if (!strcmp(reply, "QUR DUP")) printf("Question is a duplicate, try again.\n");
-    else if (!strcmp(reply, "QUR FUL")) printf("The question list is full.\n");
-    else if (!strcmp(reply, "QUR NOK")) printf("Failed to process your request.\n");
+    else if (!strcmp(reply, "QUR DUP")) printf("Question is a duplicate, try again\n");
+    else if (!strcmp(reply, "QUR FUL")) printf("The question list is full\n");
+    else if (!strcmp(reply, "QUR NOK")) printf("Failed to process your request\n");
 
     close(fd);
 }
 
-void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen, char* questionChosen, char *text_file, char *img_file) {
+void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen, 
+    char* questionChosen, char *text_file, char *img_file) {
     FILE *answerFd, *imageFd;
     char *answerPath = malloc(strlen(text_file) + strlen(".txt") + 1);
     
     sprintf(answerPath, "%s.txt", text_file);
     DEBUG_PRINT("[ANS] Destiny file path: %s\n", answerPath);
-   
+    
+    /* Ensure specified answer path is valid */
     if (!(answerFd = fopen(answerPath, "r"))) {
-        printf("[Error] Can't find the specified answer file.\n");
+        printf("The specified answer file is unavailable\n");
         free(answerPath);
+        return;
+    }
+    free(answerPath);
+
+    /* Ensure specified image path is valid, if applicable */
+    if (img_file && !(imageFd = fopen(strtok(img_file, "\n"), "rb"))) {
+        printf("The specified image file is unavailable\n");
+        fclose(answerFd);
         return;
     }
 
@@ -693,16 +613,9 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
         sizeAux -= BUFFER_SIZE;
     }
 
-    free(answerPath);
     fclose(answerFd);
 
     if (img_file != NULL) {
-        if (!(imageFd = fopen(strtok(img_file, "\n"), "rb"))) {
-            printf("[Error] Can't find the specified image file.\n");
-            free(adata);
-            return;
-        }
-
         DEBUG_PRINT("[ANS] Image properties:\n");
         
         /* Get image size */
@@ -717,13 +630,13 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
 
         /* Send image information */
         snprintf(adata, BUFFER_SIZE, " 1 %s %ld ", iext, isize);
-        //SendMessageTCP(adata, &fd, res);
         write(fd, adata, strlen(adata));
+
         /* Send image data */
         sizeAux = isize;
         idata = (char*) malloc(sizeof(char) * BUFFER_SIZE);
 
-        DEBUG_PRINT("[ANS] Preparing to send image data.\n");
+        DEBUG_PRINT("[ANS] Preparing to send image data\n");
         DEBUG_PRINT("[ANS] Writing image data (0%% completed)");
         while (sizeAux > 0) {
             nRead = fread(idata, 1, BUFFER_SIZE, imageFd);
@@ -744,39 +657,39 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
         write(fd, " 0\n", 3);
     }
 
-    DEBUG_PRINT("[ANS] Finished sending files.\n");
-    DEBUG_PRINT("[ANS] Preparing to receive server response.\n");
+    DEBUG_PRINT("[ANS] Finished sending files\n");
+    DEBUG_PRINT("[ANS] Preparing to receive server response\n");
 
     /* Parse reply */
     char* reply = strtok(receiveMessageTCP(fd), "\n");
-    DEBUG_PRINT("[ANS] Received reply: \"%s\".\n", reply);
+    DEBUG_PRINT("[ANS] Received reply: \"%s\"\n", reply);
 
     if (!strcmp(reply, "ANR OK")) printf("Answer submitted!\n");
-    else if (!strcmp(reply, "ANR FUL")) printf("The list is already full.\n");
-    else if (!strcmp(reply, "ANR NOK")) printf("Failed to process your request.\n");
+    else if (!strcmp(reply, "ANR FUL")) printf("The list is already full\n");
+    else if (!strcmp(reply, "ANR NOK")) printf("Failed to process your request\n");
 
     close(fd);
     free(adata);
 }
 
-char * questionSelectNum(int question, int num_questions, char ** questions) {
+char* questionSelectNum(int question, int num_questions, char ** questions) {
     if (num_questions == -1) {
-        printf("Run question list first.\n");
+        printf("Run question list first\n");
         return NULL;
     }
     else if (question > num_questions || question <= 0) {
-        printf("Invalid question number.\n");
+        printf("Invalid question number\n");
         return NULL;
     }
 
     return strtok(questions[question - 1], ":");
 }
 
-char * questionSelectName(char * name, int num_questions, char ** questions) {
+char* questionSelectName(char * name, int num_questions, char ** questions) {
     char * question = NULL;
 
     if (num_questions == -1){
-        printf("Run question list first.\n");
+        printf("Run question list first\n");
         return NULL;
     }
 
@@ -788,7 +701,7 @@ char * questionSelectName(char * name, int num_questions, char ** questions) {
         }
     }
 
-    if (!question) printf("Can't find that question.\n");
+    if (!question) printf("Can't find that question\n");
     return question;
 }
 
@@ -809,7 +722,7 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     sscanf(reply, "%*s %*d %ld", &qsize);
     DEBUG_PRINT("[QG] Parsed reply: %s", reply);
 
-    offset = 3 + 1 + 5 + 1 + floor(log10(abs(qsize))) + 1 + 1; // get len of int
+    offset = 3 + 1 + 5 + 1 + lengthInt(qsize) + 1;
     pathLen = strlen("client/") + strlen(topic) + strlen("/") + strlen(questionChosen) + strlen(".txt") + 1;
     path = (char*) malloc(pathLen);
     sprintf(path, "client/%s/%s.txt", topic, questionChosen);
@@ -830,7 +743,7 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     }
 
     if (recvTCPWriteFile(fd, path, &reply, &nMsg, BUFFER_SIZE, &offset, qsize, DEBUG_TEST) == -1)
-        printf("Erro ao escrever o ficheiro da pergunta.\n");
+        printf("Erro ao escrever o ficheiro da pergunta\n");
     if (offset == 0) offset++;
 
     if (offset != 0 && offset >= nMsg) {
@@ -844,10 +757,10 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     if (qIMG) {
         sscanf(reply + offset, "%s %ld", qiext, &qisize);
         sprintf(path, "client/%s/%s.%s", topic, questionChosen, qiext);
-        offset += strlen(qiext) + 1 + floor(log10(abs(qisize))) + 1 + 1;
+        offset += strlen(qiext) + 1 + lengthInt(qisize) + 1;
         
         if (recvTCPWriteFile(fd, path, &reply, &nMsg, BUFFER_SIZE, &offset, qisize, DEBUG_TEST) == -1)
-            printf("Erro ao escrever o ficheiro da pergunta.\n");
+            printf("Erro ao escrever o ficheiro da pergunta\n");
         if (offset == 0) offset++;
     }
 
@@ -858,9 +771,8 @@ void questionGet(char *topic, char *questionChosen, int fd) {
 
     /* Get Number of Answers */
     sscanf(reply + offset, " %d", &N);
-    DEBUG_PRINT("[ANS] Preparing to receive %d answer(s).\n", N);
 
-    if (N > 0) offset += (2 + floor(log10(abs(N))));
+    if (N > 0) offset += (lengthInt(N) + 1);
     else offset += 2;
 
     /* Print question */
@@ -871,6 +783,8 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     fread(question, 1, BUFFER_SIZE, fp);
     question[qsize] = '\0';
     printf("\nQ: %s\n", question);
+    printf("\n%d answers found for this question:\n", N);
+
     fclose(fp);
     free(path);
     free(question);
@@ -883,10 +797,10 @@ void questionGet(char *topic, char *questionChosen, int fd) {
         pathLen = strlen("client/") + strlen(topic) + strlen("/") + strlen(questionChosen) + strlen("_") + strlen(AN) + strlen(".txt") + 1;
         path = (char*) malloc(pathLen);
         sprintf(path, "client/%s/%s_%s.txt", topic, questionChosen, AN);
-        offset += 2 + 1 + 5 + 1 + floor(log10(abs(asize))) + 1 + 1;
+        offset += 2 + 1 + 5 + 1 + lengthInt(asize) + 1;
         
         if (recvTCPWriteFile(fd, path, &reply, &nMsg, BUFFER_SIZE, &offset, asize, DEBUG_TEST) == -1)
-            printf("Erro ao escrever o ficheiro da pergunta.\n");
+            printf("Erro ao escrever o ficheiro da pergunta\n");
         if (offset == 0) offset++;
 
         if (offset != 0 && offset >= nMsg) {
@@ -899,12 +813,12 @@ void questionGet(char *topic, char *questionChosen, int fd) {
 
         if (aIMG) {
             sscanf(reply + offset, "%s %ld", aiext, &aisize);
-            DEBUG_PRINT("[ANS] Preparing to receive image (size: %ld, file extention: %s).\n", aisize, aiext);
+            DEBUG_PRINT("[ANS] Preparing to receive image (size: %ld, file extention: %s)\n", aisize, aiext);
             sprintf(path, "client/%s/%s_%s.%s", topic, questionChosen, AN, aiext);
-            offset += 3 + strlen(aiext) + floor(log10(abs(aisize)));
+            offset += 2 + strlen(aiext) + lengthInt(aisize);
             
             if (recvTCPWriteFile(fd, path, &reply, &nMsg, BUFFER_SIZE, &offset, aisize, DEBUG_TEST) == -1)
-                printf("Erro ao escrever o ficheiro da pergunta.\n");
+                printf("Erro ao escrever o ficheiro da pergunta\n");
 
             if (offset == 0) offset++;
         }

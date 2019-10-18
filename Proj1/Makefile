@@ -1,4 +1,4 @@
-SOURCES = Server.c Client.c lib/utility.c
+SOURCES = Server.c Client.c lib/utility.c lib/commandlinereader.c
 OBJS = $(SOURCES:%.c=%.o)
 CC   = gcc
 CFLAGS = -g -Wall -Wextra -Werror
@@ -10,12 +10,8 @@ all: user FS
 FS: Server.o lib/utility.o
 	$(CC) $(CFLAGS) $^ -o FS $(LDFLAGS)
 
-user: Client.o lib/utility.o
+user: Client.o lib/utility.o lib/commandlinereader.o
 	$(CC) $(CFLAGS) $^ -o user $(LDFLAGS)
-
-Server.o: Server.c
-Client.o: Client.c lib/utility.h
-lib/utility.o: lib/utility.c lib/utility.h
 
 clean:
 	@echo Cleaning...
