@@ -7,6 +7,8 @@ Project directories:
 
     topics/: Contains the server's topic folders and the List_of_Topics file, that contains the list of every topic and who requested it;
 	
+	topics/RC/: demonstration files, to demonstrate how the server organizes the information;
+	
 	scripts/: Has all the script results, each one in a .pdf file.
 
 --------------------------------------------------------------------------------------------------------------------------------------------
