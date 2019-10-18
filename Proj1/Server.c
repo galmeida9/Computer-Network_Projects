@@ -94,7 +94,9 @@ int main(int argc, char **argv) {
 }
 
 void waitRequest() {
-    int maxFd;
+    int maxFd, result;
+    char *bufferUDP, *response, *bufferTCP;
+    ssize_t nMsg;
     fd_set readset;
 
     FD_ZERO(&readset);
@@ -102,9 +104,6 @@ void waitRequest() {
 
     listWithTopics = (char**) malloc(sizeof(char*) * MAX_TOPICS);
     while (1) {
-        int result;
-        ssize_t nMsg;
-
         /* Setup fd in readset */
         FD_SET(fdUDP, &readset);
         FD_SET(fdTCP, &readset);
@@ -115,24 +114,23 @@ void waitRequest() {
         else {
             if (FD_ISSET(fdUDP, &readset)){
                 socklen_t addrlen = sizeof(addrUDP);
-                char *bufferUDP = malloc(sizeof(char) * BUFFER_SIZE);
+                bufferUDP = malloc(sizeof(char) * BUFFER_SIZE);
 
                 nMsg = recvfrom(fdUDP, bufferUDP, BUFFER_SIZE, 0, (struct sockaddr*) &addrUDP, &addrlen);
                 if (nMsg == -1) exit(EXIT_FAILURE);
 
                 /* Process message */
-                char *response = processUDPMessage(strtok(bufferUDP, "\n"));
+                response = processUDPMessage(strtok(bufferUDP, "\n"));
 
                 /* Send response */
                 nMsg = sendto(fdUDP, response, strlen(response), 0, (struct sockaddr*) &addrUDP, addrlen);
                 if (nMsg == -1) exit(EXIT_FAILURE);
                 
-                printf(" [UDP]\n");
                 free(response);
                 free(bufferUDP);
             }
             else if (FD_ISSET(fdTCP, &readset)){
-                char *bufferTCP = malloc(sizeof(char) * BUFFER_SIZE);
+                bufferTCP = malloc(sizeof(char) * BUFFER_SIZE);
 
                 if ((newfd = accept(fdTCP, (struct sockaddr*) &addrTCP, &addrlenTCP)) == -1) exit(EXIT_FAILURE);
 
@@ -140,7 +138,7 @@ void waitRequest() {
                 if (nMsg == -1) exit(EXIT_FAILURE);
 
                 /* Process message */
-                char *response = processTCPMessage(bufferTCP, nMsg, newfd);
+                response = processTCPMessage(bufferTCP, nMsg, newfd);
 
                 /* Send response */
                 if (response != NULL) {
@@ -148,7 +146,6 @@ void waitRequest() {
                     if (nMsg == -1) exit(EXIT_FAILURE);
                 }
 
-                printf(" [TCP]\n");
                 free(response);
                 free(bufferTCP);
             }
@@ -187,7 +184,7 @@ char* processUDPMessage(char *buffer) {
     else if (strcmp(command, "LTP") == 0) {
         response = listOfTopics();
         free(bufferBackup);
-        printf("Sent list of topics");
+        printf("Sent list of topics\n");
         return response;
     }
 
@@ -209,7 +206,7 @@ char* processUDPMessage(char *buffer) {
     }
 
     else {
-        printf("Command not found");
+        printf("Command not found\n");
         free(bufferBackup);
         response = strdup("ERR\n");
         return response;
@@ -235,7 +232,7 @@ char* processTCPMessage(char *buffer, int len, int fd) {
         response = submitAnswer(bufferBackup, fd, len);
 
     else {
-        printf("Command not found");
+        printf("Command not found\n");
         response = strdup("ERR\n");
     }
 
@@ -264,15 +261,15 @@ char* registerNewStudent(char *arg1) {
     int stuNumber = atoi(arg1);
 
     if (stuNumber == 0) {
-        printf("Invalid student ID");
+        printf("Invalid student ID\n");
         return strdup("RGR NOK\n");
     }
     else if (!checkIfStudentCanRegister(stuNumber)) {
-        printf("Register %d: refused", stuNumber);
+        printf("Register %d: refused\n", stuNumber);
         return strdup("RGR NOK\n");
     }
 
-    printf("Register %d: accepted", stuNumber);
+    printf("Register %d: accepted\n", stuNumber);
     return strdup("RGR OK\n");
 }
 
