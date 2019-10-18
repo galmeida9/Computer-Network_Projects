@@ -139,7 +139,10 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
 
     while(1) {
         memset(buffer, 0, sizeof(*buffer));
-        if ((getline(&line, &size, stdin)) == -1) exit(EXIT_FAILURE);
+        if ((getline(&line, &size, stdin)) == -1) {
+            printf("Error reading user input, please try again.\n");
+            continue;
+        }
         command = strtok(line, " ");
 
         if (!strcmp(command, "register") || !strcmp(command, "reg")) {
@@ -506,7 +509,10 @@ void submitQuestion(int fd, struct addrinfo **res, int aUserID,
 
     while (sizeAux > 0) {
         nRead = fread(qdata, 1 , BUFFER_SIZE, questionFd);
-        if ((write(fd, qdata, nRead)) == -1) exit(EXIT_FAILURE);
+        if ((write(fd, qdata, nRead)) == -1) {
+            printf("Error sending question file.\n");
+            return;
+        }
         sizeAux = sizeAux - BUFFER_SIZE;
     }
 
@@ -531,7 +537,10 @@ void submitQuestion(int fd, struct addrinfo **res, int aUserID,
 
         /* Send image information */
         snprintf(request, BUFFER_SIZE, " 1 %s %ld ", aiext, aisize);
-        if ((write(fd, request, strlen(request))) == -1) exit(EXIT_FAILURE);
+        if ((write(fd, request, strlen(request))) == -1) {
+            printf("Error sending question information.\n");
+            return;
+        }
 
         /* Send image data */
         aidata = (char*) malloc(sizeof(char) * BUFFER_SIZE);
@@ -539,16 +548,25 @@ void submitQuestion(int fd, struct addrinfo **res, int aUserID,
 
         while (sizeAux > 0){
             int nRead = fread(aidata, 1 , BUFFER_SIZE,imageFd);
-            if ((write(fd, aidata, nRead)) == -1) exit(EXIT_FAILURE);
+            if ((write(fd, aidata, nRead)) == -1) {
+                printf("Error sending question information.\n");
+                return;
+            }
             sizeAux = sizeAux - BUFFER_SIZE;
         }
 
-        if ((write(fd, "\n", strlen("\n"))) == -1) exit(EXIT_FAILURE);
+        if ((write(fd, "\n", strlen("\n"))) == -1) {
+            printf("Error sending question information.\n");
+            return;
+        }
         fclose(imageFd);
         free(aidata);
     }
     else {
-        if ((write(fd, " 0\n", 3)) == -1) exit(EXIT_FAILURE);
+        if ((write(fd, " 0\n", 3)) == -1) {
+            printf("Error sending question information.\n");
+            return;
+        }
     }
     free(request);
 
@@ -608,7 +626,10 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
 
     while (sizeAux > 0) {
         nRead = fread(adata, 1 , BUFFER_SIZE, answerFd);
-        if ((write(fd, adata, nRead)) == -1) exit(EXIT_FAILURE);
+        if ((write(fd, adata, nRead)) == -1) {
+            printf("Error sending answer information.\n");
+            return;
+        }
         sizeAux -= BUFFER_SIZE;
     }
 
@@ -629,7 +650,10 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
 
         /* Send image information */
         snprintf(adata, BUFFER_SIZE, " 1 %s %ld ", iext, isize);
-        if ((write(fd, adata, strlen(adata))) == -1) exit(EXIT_FAILURE);
+        if ((write(fd, adata, strlen(adata))) == -1) {
+            printf("Error sending answer information.\n");
+            return;
+        }
 
         /* Send image data */
         sizeAux = isize;
@@ -639,7 +663,10 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
         DEBUG_PRINT("[ANS] Writing image data (0%% completed)");
         while (sizeAux > 0) {
             nRead = fread(idata, 1, BUFFER_SIZE, imageFd);
-            if ((write(fd, idata, nRead)) == -1) exit(EXIT_FAILURE);
+            if ((write(fd, idata, nRead)) == -1) {
+                printf("Error sending answer information.\n");
+                return;
+            }
             sizeAux = sizeAux - nRead;
 
             fflush(stdout);
@@ -648,12 +675,18 @@ void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen,
         }
         
         DEBUG_PRINT("\n");
-        if ((write(fd, "\n", 1)) == -1) exit(EXIT_FAILURE);
+        if ((write(fd, "\n", 1)) == -1) {
+            printf("Error sending answer information.\n");
+            return;
+        }
         fclose(imageFd);
         free(idata);
     }
     else {
-        if ((write(fd, " 0\n", 3)) == -1) exit(EXIT_FAILURE);
+        if ((write(fd, " 0\n", 3)) == -1) {
+            printf("Error sending answer information.\n");
+            return;
+        }
     }
 
     DEBUG_PRINT("[ANS] Finished sending files\n");
@@ -794,9 +827,15 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     /* Print question */
     sprintf(path, "client/%s/%s.txt", topic, questionChosen);
     FILE * fp = fopen(path, "r");
-    if (fp == NULL) exit(1);
+    if (fp == NULL) {
+        printf("Error opening question file.\n");
+        return;
+    }
     char * question = malloc(qsize + 1);
-    if (!fread(question, 1, BUFFER_SIZE, fp)) exit(EXIT_FAILURE);
+    if (!fread(question, 1, BUFFER_SIZE, fp)) {
+        printf("Error reading question file.\n");
+        return;
+    }
     question[qsize] = '\0';
     printf("\nQ: %s\n", question);
     
