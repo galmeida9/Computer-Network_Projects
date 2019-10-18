@@ -21,5 +21,6 @@ int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int *sizeMsg,
 
 int lengthInt(int x);
 char** arrayInit(int len);
+int vertifyIfSpace(char *buffer, int offset, char *errorMessage);
 
 #endif /* UTILITY_H */

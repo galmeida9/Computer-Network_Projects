@@ -1,6 +1,0 @@
-reg 12345
-tl
-ts 4
-ql
-qg 4
-exit

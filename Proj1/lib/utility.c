@@ -94,3 +94,12 @@ char** arrayInit(int len) {
         array[i] = NULL;
     return array;
 }
+
+int vertifyIfSpace(char *buffer, int offset, char *errorMessage) {
+    if (buffer[offset] == ' ') {
+        printf("Reading space where %s should be.\n", errorMessage);
+        return 1;
+    }
+
+    return 0;
+}
