@@ -94,7 +94,9 @@ int main(int argc, char **argv) {
 }
 
 void waitRequest() {
-    int maxFd;
+    int maxFd, result;
+    char *bufferUDP, *response, *bufferTCP;
+    ssize_t nMsg;
     fd_set readset;
 
     FD_ZERO(&readset);
@@ -102,9 +104,6 @@ void waitRequest() {
 
     listWithTopics = (char**) malloc(sizeof(char*) * MAX_TOPICS);
     while (1) {
-        int result;
-        ssize_t nMsg;
-
         /* Setup fd in readset */
         FD_SET(fdUDP, &readset);
         FD_SET(fdTCP, &readset);
@@ -115,24 +114,23 @@ void waitRequest() {
         else {
             if (FD_ISSET(fdUDP, &readset)){
                 socklen_t addrlen = sizeof(addrUDP);
-                char *bufferUDP = malloc(sizeof(char) * BUFFER_SIZE);
+                bufferUDP = malloc(sizeof(char) * BUFFER_SIZE);
 
                 nMsg = recvfrom(fdUDP, bufferUDP, BUFFER_SIZE, 0, (struct sockaddr*) &addrUDP, &addrlen);
                 if (nMsg == -1) exit(EXIT_FAILURE);
 
                 /* Process message */
-                char *response = processUDPMessage(strtok(bufferUDP, "\n"));
+                response = processUDPMessage(strtok(bufferUDP, "\n"));
 
                 /* Send response */
                 nMsg = sendto(fdUDP, response, strlen(response), 0, (struct sockaddr*) &addrUDP, addrlen);
                 if (nMsg == -1) exit(EXIT_FAILURE);
                 
-                printf(" [UDP]\n");
                 free(response);
                 free(bufferUDP);
             }
             else if (FD_ISSET(fdTCP, &readset)){
-                char *bufferTCP = malloc(sizeof(char) * BUFFER_SIZE);
+                bufferTCP = malloc(sizeof(char) * BUFFER_SIZE);
 
                 if ((newfd = accept(fdTCP, (struct sockaddr*) &addrTCP, &addrlenTCP)) == -1) exit(EXIT_FAILURE);
 
@@ -140,7 +138,7 @@ void waitRequest() {
                 if (nMsg == -1) exit(EXIT_FAILURE);
 
                 /* Process message */
-                char *response = processTCPMessage(bufferTCP, nMsg, newfd);
+                response = processTCPMessage(bufferTCP, nMsg, newfd);
 
                 /* Send response */
                 if (response != NULL) {
@@ -187,7 +185,7 @@ char* processUDPMessage(char *buffer) {
     else if (strcmp(command, "LTP") == 0) {
         response = listOfTopics();
         free(bufferBackup);
-        printf("Sent list of topics");
+        printf("Sent list of topics\n");
         return response;
     }
 
@@ -209,7 +207,7 @@ char* processUDPMessage(char *buffer) {
     }
 
     else {
-        printf("Command not found");
+        printf("Command not found\n");
         free(bufferBackup);
         response = strdup("ERR\n");
         return response;
@@ -235,7 +233,7 @@ char* processTCPMessage(char *buffer, int len, int fd) {
         response = submitAnswer(bufferBackup, fd, len);
 
     else {
-        printf("Command not found");
+        printf("Command not found\n");
         response = strdup("ERR\n");
     }
 
@@ -264,15 +262,15 @@ char* registerNewStudent(char *arg1) {
     int stuNumber = atoi(arg1);
 
     if (stuNumber == 0) {
-        printf("Invalid student ID");
+        printf("Invalid student ID\n");
         return strdup("RGR NOK\n");
     }
     else if (!checkIfStudentCanRegister(stuNumber)) {
-        printf("Register %d: refused", stuNumber);
+        printf("Register %d: refused\n", stuNumber);
         return strdup("RGR NOK\n");
     }
 
-    printf("Register %d: accepted", stuNumber);
+    printf("Register %d: accepted\n", stuNumber);
     return strdup("RGR OK\n");
 }
 
@@ -335,15 +333,15 @@ char* topicPropose(char *input) {
 
     /* Check if requirements are met */
     if (numberOfTopics == MAX_TOPICS) {
-        printf("Topic \"%s\" rejected: list is already full", topic);
+        printf("Topic \"%s\" rejected: list is already full\n", topic);
         return strdup("PTR FUL\n"); 
     }
     else if (strlen(topic) > TOPICNAME_SIZE) {
-        printf("Topic \"%s\" rejected: topic name is too long", topic);
+        printf("Topic \"%s\" rejected: topic name is too long\n", topic);
         return strdup("PTR NOK\n");
     }
     else if (isTopicInList(topic)) {
-        printf("Topic \"%s\" rejected: topic already exists", topic);
+        printf("Topic \"%s\" rejected: topic already exists\n", topic);
         return strdup("PTR DUP\n");
     }
     addToTopicList(topic, id);
@@ -363,10 +361,10 @@ char* topicPropose(char *input) {
     snprintf(questionPath, pathLen, "%s%s%s", TOPIC_FOLDER, topic, QUESTIONS_LIST);
 
     if (!(topicFd = fopen(questionPath, "w")))
-        printf("Failed to create file for the new topic");
+        printf("Failed to create file for the new topic\n");
     else {
         fclose(topicFd);
-        printf("Topic \"%s\" accepted", topic);
+        printf("Topic \"%s\" accepted\n", topic);
     }
     
     free(questionPath);
@@ -380,7 +378,7 @@ void updateListWithTopics() {
     FILE *topicList;
 
     if (!(topicList = fopen(TOPIC_LIST, "r"))) {
-        printf("Error opening topic list file");
+        printf("Error opening topic list file\n");
         return;
     }
 
@@ -407,7 +405,7 @@ void addToTopicList(char *topic, char *usedId) {
 
     listWithTopics[numberOfTopics++] = strdup(topic);
     if (!(topicList = fopen(TOPIC_LIST, "a"))) {
-        printf("Error opening topic list file");
+        printf("Error opening topic list file\n");
         return;
     }
 
@@ -462,11 +460,11 @@ char* questionSubmit(char *input, int fd, int nMsg) {
     /* Check if the question list is full */
     if (NQ >= 99 || found) {
         if (found) {
-            printf("Question \"%s\" rejected: question is a duplicate", question);
+            printf("Question \"%s\" rejected: question is a duplicate\n", question);
             response = strdup("QUR DUP\n");
         }
         else {
-            printf("Question \"%s\" rejected: question list of %s is full", 
+            printf("Question \"%s\" rejected: question list of %s is full\n", 
                 question, topic);
             response = strdup("QUR FUL\n");
         }
@@ -512,7 +510,7 @@ char* questionSubmit(char *input, int fd, int nMsg) {
     }
     else
     	fprintf(questionFd, "%s:%d:00:0:\n", question, qUserId);
-    printf("Question submited on \"%s\" (%d)", topic, qUserId);
+    printf("Question submited on \"%s\" (%d)\n", topic, qUserId);
 
     free(topic);
     free(question);
@@ -544,7 +542,7 @@ char* questionGet(char *input, int fd) {
     strcat(path, QUESTIONS_LIST);
 
     if (!(questionsFd = fopen(path, "r"))) {
-        printf("Could not open question %s description file", question);
+        printf("Could not open question %s description file\n", question);
         free(path);
         free(topicFolderPath);
         return strdup("ERR\n");
@@ -576,7 +574,7 @@ char* questionGet(char *input, int fd) {
         qIMG, qiext, fd);
     free(topicFolderPath);
     free(line);
-    printf("Sent stored files for question \"%s\"", question);
+    printf("Sent stored files for question \"%s\"\n", question);
     return NULL;
 }
 
@@ -648,14 +646,19 @@ void questionGetReadFiles(char* path, char* question, int qUserId,
         free(qidata);
         fclose(imageFd);
         free(imgPath);
-        numberOfAnswers > 10 ? snprintf(response, BUFFER_SIZE, " 10") : snprintf(response, BUFFER_SIZE, " %d", numberOfAnswers);
-        write(fd, response, strlen(response));
+
+        numberOfAnswers > 10 
+        ? snprintf(response, BUFFER_SIZE, " 10")
+        : snprintf(response, BUFFER_SIZE, " %d", numberOfAnswers);
     }
 
     else {
-        numberOfAnswers > 10 ? snprintf(response, BUFFER_SIZE, " 0 10") : snprintf(response, BUFFER_SIZE, " 0 %d", numberOfAnswers);
-        write(fd, response, strlen(response));
+        numberOfAnswers > 10
+        ? snprintf(response, BUFFER_SIZE, " 0 10")
+        : snprintf(response, BUFFER_SIZE, " 0 %d", numberOfAnswers);
     }
+
+    write(fd, response, strlen(response));
     free(qdata);
 
     /* Get the answers information */
@@ -663,7 +666,11 @@ void questionGetReadFiles(char* path, char* question, int qUserId,
     if (numberOfAnswers > 10) firstAnswer = numberOfAnswers - DISPLAY_ANSWERS + 1;
     for (int i = firstAnswer; i <= numberOfAnswers; i++) {
         questionNumber = malloc(sizeof(char) * AN_SIZE);
-        i < 10 ? snprintf(questionNumber, AN_SIZE, "0%d", i) : snprintf(questionNumber, AN_SIZE, "%d", i);
+        
+        i < 10
+        ? snprintf(questionNumber, AN_SIZE, "0%d", i)
+        : snprintf(questionNumber, AN_SIZE, "%d", i);
+
         getAnswerInformation(path, question, questionNumber, fd);
         free(questionNumber);
     }
@@ -747,7 +754,7 @@ void getAnswerInformation(char *path, char *question, char *numb, int fd) {
         imgPath = malloc(sizeof(char) * BUFFER_SIZE);
         snprintf(imgPath, BUFFER_SIZE, "%s/%s_%s.%s", path, question, numb, aiext);
         if (!(imageFd = fopen(imgPath, "r"))) {
-            printf("Could not open answer %s image file of question %s", numb, question);
+            printf("Could not open answer %s image file of question %s\n", numb, question);
             free(adata);
             free(line);
             free(imgPath);
@@ -794,7 +801,7 @@ char* listOfQuestions(char *topic) {
     strcat(path, QUESTIONS_LIST);
 
     if (!(fp = fopen (path, "r"))) {
-        printf ("There are no questions available");
+        printf ("There are no questions available\n");
         return strdup("LQR 0\n");
     }
 
@@ -811,7 +818,7 @@ char* listOfQuestions(char *topic) {
     strcat(response,"\n");
     fclose(fp);
     free(line);
-    printf("Sent list of questions");
+    printf("Sent list of questions\n");
     return response;
 }
 
@@ -965,7 +972,7 @@ char* submitAnswer(char* input, int fd, int nMsg) {
 
         /* Receive and write image */
         if (recvTCPWriteFile(fd, answerImgPath, &input, &nMsg, BUFFER_SIZE, &offset, isize, DEBUG_TEST) == -1)
-            printf("erro\n");
+            printf("Unable to write answer image file\n");
         if (offset == 0) offset++;
 
         free(answerImgPath);
