@@ -1,15 +1,14 @@
 Project directories:
 
-    client/: Stores all the files for the client, every topic information that the client gets from the server, it stores
-            that topic's folder inside the client directory;
+    client/: A working directory for the client that is created upon its launch (if needed). Stores all the files for the client. Every topic information that the client gets from the server is stored afterwards inside the client directory;
 
     lib/: Collection of utility functions and macros with general purpose;
 
     topics/: Contains the server's topic folders and the List_of_Topics file, that contains the list of every topic and who requested it;
-	
-	topics/RC/: demonstration files, to demonstrate how the server organizes the information;
-	
-	scripts/: Has all the script results, each one in a .pdf file.
+
+    topics/RC/: demonstration files, to demonstrate how the server organizes the information;
+
+    scripts/: Has all the script results, each one in a .pdf file.
 
 --------------------------------------------------------------------------------------------------------------------------------------------
 
