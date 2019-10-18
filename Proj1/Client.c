@@ -750,17 +750,28 @@ void questionGet(char *topic, char *questionChosen, int fd) {
         while ( (nMsg = read(fd, reply, BUFFER_SIZE))<= 0 );
         offset = 1;
     }
-  
+
+    if (vertifyIfSpace(reply, offset, "qIMG")) return;
     sscanf(reply + offset, "%d", &qIMG);
+    if (qIMG != 0 && qIMG != 1) {
+        printf("qIMG can only take the values 0 or 1.\n");
+        return;
+    }
     offset += 2;
 
     if (qIMG) {
-        sscanf(reply + offset, "%s %ld", qiext, &qisize);
+        if (vertifyIfSpace(reply, offset, "qiext")) return;
+        sscanf(reply + offset, "%s", qiext);
+        offset += strlen(qiext) + 1;
+
+        if (vertifyIfSpace(reply, offset, "qizise")) return;
+        sscanf(reply + offset, "%ld", &qisize);
+
         sprintf(path, "client/%s/%s.%s", topic, questionChosen, qiext);
-        offset += strlen(qiext) + 1 + lengthInt(qisize) + 1;
-        
+        offset += lengthInt(qisize) + 1;
+
         if (recvTCPWriteFile(fd, path, &reply, &nMsg, BUFFER_SIZE, &offset, qisize, DEBUG_TEST) == -1)
-            printf("Erro ao escrever o ficheiro da pergunta\n");
+            printf("Erro ao escrever a imagem da pergunta\n");
         if (offset == 0) offset++;
     }
 
@@ -770,7 +781,12 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     }
 
     /* Get Number of Answers */
-    sscanf(reply + offset, " %d", &N);
+    if (vertifyIfSpace(reply, offset, "number of answers")) return;
+    sscanf(reply + offset, "%d", &N);
+    if (N > 10) {
+        printf("Can only receive the maximum of 10 answers, not more.\n");
+        return;
+    }
 
     if (N > 0) offset += (lengthInt(N) + 1);
     else offset += 2;
@@ -792,12 +808,29 @@ void questionGet(char *topic, char *questionChosen, int fd) {
     /* Answers section */
     AN = (char*) malloc(3);
     for (int i = 0; i < N; i++) {
-        sscanf(reply + offset, "%s %d %ld", AN, &userId ,&asize);
+        if (vertifyIfSpace(reply, offset, "number of the answer")) return;
+        sscanf(reply + offset, "%s", AN);
+        offset += strlen(AN) + 1;
+        if (strlen(AN) != 2) {
+            printf("Number of the answer can only have 2 digits.\n");
+            return;
+        }
+
+        if (vertifyIfSpace(reply, offset, "user ID")) return;
+        sscanf(reply + offset, "%d", &userId);
+        offset += lengthInt(userId) + 1;
+        if (lengthInt(userId) != 5) {
+            printf("User ID has to have only 5 digits.\n");
+            return;
+        }
+
+        if (vertifyIfSpace(reply, offset, "asize")) return;
+        sscanf(reply + offset, "%ld", &asize);
+        offset += lengthInt(asize) + 1;
 
         pathLen = strlen("client/") + strlen(topic) + strlen("/") + strlen(questionChosen) + strlen("_") + strlen(AN) + strlen(".txt") + 1;
         path = (char*) malloc(pathLen);
         sprintf(path, "client/%s/%s_%s.txt", topic, questionChosen, AN);
-        offset += 2 + 1 + 5 + 1 + lengthInt(asize) + 1;
         
         if (recvTCPWriteFile(fd, path, &reply, &nMsg, BUFFER_SIZE, &offset, asize, DEBUG_TEST) == -1)
             printf("Erro ao escrever o ficheiro da pergunta\n");
@@ -808,14 +841,25 @@ void questionGet(char *topic, char *questionChosen, int fd) {
             offset = 1;
         }
 
+        if (vertifyIfSpace(reply, offset, "aIMG")) return;
         sscanf(reply + offset, "%d", &aIMG);
+        if (aIMG != 0 && aIMG != 1) {
+            printf("aIMG can only take the values 0 or 1.\n");
+            return;
+        }
         offset += 2;
 
         if (aIMG) {
-            sscanf(reply + offset, "%s %ld", aiext, &aisize);
+            if (vertifyIfSpace(reply, offset, "aiext")) return;
+            sscanf(reply + offset, "%s", aiext);
+            offset += strlen(aiext) + 1;
+
+            if (vertifyIfSpace(reply, offset, "aisize")) return;
+            sscanf(reply + offset, "%ld", &aisize);
+            offset += lengthInt(aisize) + 1;
+
             DEBUG_PRINT("[ANS] Preparing to receive image (size: %ld, file extention: %s)\n", aisize, aiext);
             sprintf(path, "client/%s/%s_%s.%s", topic, questionChosen, AN, aiext);
-            offset += 2 + strlen(aiext) + lengthInt(aisize);
             
             if (recvTCPWriteFile(fd, path, &reply, &nMsg, BUFFER_SIZE, &offset, aisize, DEBUG_TEST) == -1)
                 printf("Erro ao escrever o ficheiro da pergunta\n");
