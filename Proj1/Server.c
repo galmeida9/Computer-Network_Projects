@@ -2,10 +2,14 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 #include "lib/utility.h"
 
 #define AN_SIZE 3
@@ -13,7 +17,6 @@
 #define DISPLAY_ANSWERS 10
 #define MAX_ANSWERS 99
 #define MAX_TOPICS 99
-#define PORT "58013"
 #define QUESTIONS_DESC "_desc"
 #define QUESTIONS_LIST "/_questions.txt"
 #define TOPIC_FOLDER "topics/"
@@ -58,7 +61,7 @@ int main(int argc, char **argv) {
     sigemptyset(&handle_kill.sa_mask);
     sigaction(SIGINT, &handle_kill, NULL);
 
-    strcpy(port, PORT);
+    strcpy(port, DEFAULT_PORT);
     printf("Welcome to RC Forum!\n");
 
     /*Get port from arguments*/
@@ -950,7 +953,8 @@ char* submitAnswer(char* input, int fd, int nMsg) {
     DEBUG_PRINT("[ANS] Finished writing file.\n\n");
 
     /* Prepare for image */
-    sscanf(input+offset, "%d", &aIMG);
+    sscanf(input + offset, "%d", &aIMG);
+    DEBUG_PRINT("[ANS] input + offset: \"%s\"\n", input + offset);
     offset += lengthInt(aIMG) + 1;
 
     DEBUG_PRINT("[ANS] Has Image? %d\n", aIMG);

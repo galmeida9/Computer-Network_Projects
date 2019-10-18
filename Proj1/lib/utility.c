@@ -6,6 +6,11 @@
  * =============================================================================
  */
 
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 #include "utility.h"
 
 int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int *sizeMsg,
@@ -63,6 +68,7 @@ int recvTCPWriteFile(int fd, char *filePath, char **bufferAux, int *sizeMsg,
         memset(buffer, 0, sizeof(*buffer));
         *offset = 0;
     }
+    fflush(stdout);
     printf("\rRetrieving file %s (100%% completed)\n", filePath);
 
     /* Close file and return */
