@@ -1,49 +1,10 @@
-#include <arpa/inet.h>
-#include <errno.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include "lib/commandlinereader.h"
-#include "lib/utility.h"
-
-#define LEN_COMMAND 3
-#define LEN_TOPIC 10
-#define NUM_QUESTIONS 99
-#define NUM_TOPICS 99
-#define REGISTER_SIZE 12
-
-void connectToServer(int *udp_fd, int *tcp_fd, char *ip, char *port, struct addrinfo hints, struct addrinfo **resUDP, struct addrinfo **resTCP);
-void SendMessageUDP(char *message, int fd, struct addrinfo *res);
-char* receiveMessageUDP(int fd, socklen_t addrlen, struct sockaddr_in addr);
-void SendMessageTCP(char *message, int *fd, struct addrinfo **res);
-char* receiveMessageTCP(int fd);
-void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP, struct addrinfo *resTCP, socklen_t addrlen, struct sockaddr_in addr);
-int registerNewUser(int id, int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr);
-void questionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char **topics, int *numTopics);
-void freeTopics(int numTopics, char **topics);
-char* topicSelectNum(int numTopics, char **topics, int topicChosen);
-char* topicSelectName(int numTopics, char **topics, char *name);
-int getQuestionList(int fd, struct addrinfo *res, socklen_t addrlen, struct sockaddr_in addr, char *topicChosen, char **questions);
-void freeQuestions(int numQuestions, char **questions);
-void answerSubmit(int fd, struct addrinfo **res, int aUserID, char *topicChosen, char *questionChosen, char *text_file, char *img_file);
-char* questionSelectNum(int question, int num_questions, char **questions);
-void questionGet(char *topic, char *questionChosen, int fd);
-char* questionSelectName(char *name, int num_questions, char **questions);
-void submitQuestion(int fd, struct addrinfo **res, int aUserID, char *topicChosen, char *question, char *text_file, char *img_file);
-void handleTimeout(int sig);
+#include "Client.h"
 
 int DEBUG_TEST = 0;
 char *buffer;
 
 int main(int argc, char **argv) {
-    int udp_fd = -1, tcp_fd = -1;
+    int udp_fd = -1, tcp_fd = -1, userId = -1;
     char *ip, *port;
     struct addrinfo hints, *resUDP, *resTCP;
     struct sockaddr_in addr;
@@ -58,16 +19,14 @@ int main(int argc, char **argv) {
     printf("Enter 'help' for available commands\n\n");
 
     connectToServer(&udp_fd, &tcp_fd, ip, port, hints, &resUDP, &resTCP);
-
-    int userId = -1;
     parseCommands(&userId, udp_fd, tcp_fd, resUDP, resTCP, addrlen, addr);
 
-    free(buffer);
-    freeaddrinfo(resTCP);
-    freeaddrinfo(resUDP);
-    close(udp_fd);
     free(ip);
     free(port);
+    free(buffer);
+    close(udp_fd);
+    freeaddrinfo(resTCP);
+    freeaddrinfo(resUDP);
     return 0;
 }
 
@@ -158,7 +117,7 @@ char *receiveMessageTCP(int fd) {
     if ((read(fd, buffer, BUFFER_SIZE)) == -1) {
         if ((errno != EAGAIN) && (errno != EWOULDBLOCK))
             exit(1);
-        printf("[Info] The operation has timed out\n");
+        printf("Communication error\n");
     }
 
     return buffer;
@@ -188,14 +147,15 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
                 
                 if (strtok(NULL, " ") != NULL  || *userId == 0)
                     printf("Invalid command\n");
-                else  if (!(ans = registerNewUser(*userId, udp_fd, resUDP, addrlen, addr))) 
+                else  if (!(ans = registerNewUser(
+                    *userId, udp_fd, resUDP, addrlen, addr))) 
                     *userId = -1;
             }
             else
                 printf("Invalid command\n");
         }
 
-        else if (strcmp(line, "help\n") == 0) {
+        else if (!strcmp(line, "help\n")) {
             printf("\n");
             printf("reg (id)\t- sign in\n");
             printf("tl\t\t- list topics\n");
@@ -205,7 +165,7 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             printf("exit\t\t- exit program\n");
         }
 
-        else if (strcmp(line, "exit\n") == 0) {
+        else if (!strcmp(line, "exit\n")) {
             freeQuestions(numQuestions, questions);
             freeTopics(numTopics, topics);
             free(topicChosen);
@@ -281,10 +241,12 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
                     printf("Invalid command\n");
                 else {
                     if (command_type)
-                        questionChosen = questionSelectName(arg, numQuestions, questions);
+                        questionChosen = questionSelectName(
+                            arg, numQuestions, questions);
                     else {
                         question = atoi(arg);
-                        questionChosen = questionSelectNum(question, numQuestions, questions);
+                        questionChosen = questionSelectNum(
+                            question, numQuestions, questions);
                     }   
                     
                     if (questionChosen) {
@@ -303,14 +265,17 @@ void parseCommands(int *userId, int udp_fd, int tcp_fd, struct addrinfo *resUDP,
             text_file = strtok(NULL, " ");
             img_file = strtok(NULL, "\n");
            
-            if (questionChosen == NULL || text_file == NULL) printf("Invalid arguments\n");
-            else submitQuestion(tcp_fd, &resTCP, *userId, topicChosen, questionChosen, text_file, img_file);
+            if (questionChosen == NULL || text_file == NULL)
+                printf("Invalid arguments\n");
+            else submitQuestion(tcp_fd, &resTCP, *userId, topicChosen, 
+                questionChosen, text_file, img_file);
         }
 
         else if ((!strcmp(command, "as") || !strcmp(command, "answer_submit"))) {
             answerPath = strtok(NULL, " ");
             answerImg = strtok(NULL, " ");
-            answerSubmit(tcp_fd, &resTCP, *userId, topicChosen, questionChosen, strtok(answerPath, "\n"), answerImg);
+            answerSubmit(tcp_fd, &resTCP, *userId, topicChosen, questionChosen, 
+                strtok(answerPath, "\n"), answerImg);
         }
 
         else 
