@@ -5,12 +5,21 @@ char *buffer;
 
 int main(int argc, char **argv) {
     int udp_fd = -1, tcp_fd = -1, userId = -1;
-    char *ip, *port;
+    char *ip, *port, *directory;
     struct addrinfo hints, *resUDP, *resTCP;
     struct sockaddr_in addr;
     socklen_t addrlen = sizeof(addr);
     buffer = malloc(sizeof(char) * BUFFER_SIZE);
     buffer[0] = '\0';
+
+    /* Create a working directory for client */
+    directory = malloc(sizeof(char) * (strlen("client/") + 1));
+    sprintf(directory, "client/");
+
+    struct stat st = {0};
+    if (stat(directory, &st) == -1)
+        mkdir(directory, 0700);
+    free(directory);
 
     port = strdup(DEFAULT_PORT);
     ip = strdup("127.0.0.1");
